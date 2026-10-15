@@ -1,6 +1,7 @@
 import pako from 'pako'
 
 import { packGameVersion } from '../data/versions'
+import { gameDirection } from './geometry'
 import type { VersionProfile } from '../data/versions'
 import type { ProtoRegistry } from './proto'
 import type { PlacedEntity, Scene } from './scene'
@@ -92,19 +93,40 @@ function encodeModules(entity: PlacedEntity, profile: VersionProfile): unknown |
   }))
 }
 
-/** Up to four icons for the blueprint thumbnail, taken from the recipes it builds. */
-function buildIcons(scene: Scene): unknown[] {
+/**
+ * Recipes the dataset renamed, keyed by its id, with the name the game knows them by. The
+ * game's ore-melting recipes share their name with the fluid they make, and the dataset gives
+ * them ids of their own; a blueprint carrying that id is a recipe the game has never heard
+ * of, and it drops every foundry that names it.
+ */
+const GAME_RECIPE_NAMES: Record<string, string> = {
+  'iron-ore-melting': 'molten-iron',
+  'copper-ore-melting': 'molten-copper',
+}
+
+const gameRecipe = (id: string): string => GAME_RECIPE_NAMES[id] ?? id
+
+/**
+ * Up to four icons for the blueprint thumbnail, taken from the recipes it builds. 2.0 has
+ * recipe signals; 1.1 does not, and there a recipe that is not also an item shows blank.
+ */
+function buildIcons(scene: Scene, profile: VersionProfile): unknown[] {
   const recipes = new Set<string>()
-  for (const entity of scene.entities) if (entity.recipe) recipes.add(entity.recipe)
-  const source = recipes.size > 0 ? [...recipes] : [...new Set(scene.entities.map((e) => e.proto.name))]
-  return source.slice(0, 4).map((name, index) => ({ signal: { type: 'item', name }, index: index + 1 }))
+  for (const entity of scene.entities) if (entity.recipe) recipes.add(gameRecipe(entity.recipe))
+  if (recipes.size === 0) {
+    const names = [...new Set(scene.entities.map((e) => e.proto.name))]
+    return names.slice(0, 4).map((name, index) => ({ signal: { type: 'item', name }, index: index + 1 }))
+  }
+  const type = profile.directionScale === 2 ? 'recipe' : 'item'
+  return [...recipes].slice(0, 4).map((name, index) => ({ signal: { type, name }, index: index + 1 }))
 }
 
 export function toBlueprintJSON(scene: Scene, registry: ProtoRegistry, options: BlueprintOptions = {}): unknown {
   const profile = registry.profile
 
   const entities: BlueprintEntity[] = scene.entities.map((entity, index) => {
-    const direction = entity.dir / (profile.directionScale === 2 ? 1 : 2)
+    const dir = gameDirection(entity.proto.kind, entity.dir)
+    const direction = dir / (profile.directionScale === 2 ? 1 : 2)
 
     const out: BlueprintEntity = {
       entity_number: index + 1,
@@ -113,8 +135,8 @@ export function toBlueprintJSON(scene: Scene, registry: ProtoRegistry, options: 
       position: { x: entity.x + entity.w / 2, y: entity.y + entity.h / 2 },
     }
 
-    if (entity.dir !== 0) out.direction = direction
-    if (entity.recipe) out.recipe = entity.recipe
+    if (dir !== 0) out.direction = direction
+    if (entity.recipe) out.recipe = gameRecipe(entity.recipe)
     if (entity.undergroundType) out.type = entity.undergroundType
     if (entity.quality && entity.quality !== 'normal' && profile.supportsQuality) out.quality = entity.quality
 
@@ -132,7 +154,7 @@ export function toBlueprintJSON(scene: Scene, registry: ProtoRegistry, options: 
       item: 'blueprint',
       label: options.label ?? 'Untitled',
       ...(options.description ? { description: options.description } : {}),
-      icons: buildIcons(scene),
+      icons: buildIcons(scene, profile),
       entities,
       version: packGameVersion(registry.dataset),
     },

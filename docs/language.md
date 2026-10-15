@@ -75,6 +75,9 @@ defblock cell (recipe r, module[] m = (), int lanes = 2) => { … }
 A parameter answers to its own name **and to its type**, pluralised for arrays, so
 `cell (recipe iron-gear-wheel, modules prod-3)` reaches `r` and `m` without naming them.
 
+A block's body sees the `def`s of the file it is written in, so a module set or a spacing
+named once at the top can be used inside every block without being passed down.
+
 **Every block already has an `at` slot**, so it needs no coordinate parameter of its own to be
 positioned: `cell (at (4, 0))` shifts the whole block. And since an unlabelled coordinate
 always means position, `cell ((4, 0))` fills `at` and never a parameter that happens to be a
