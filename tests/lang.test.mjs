@@ -228,6 +228,18 @@ test('a block gets its own coordinate frame', () => {
   assert.deepEqual([scene.entities[1].x, scene.entities[1].y], [10, 23])
 })
 
+test('a block body sees the defs written around it', () => {
+  const { scene } = run(`
+    def prod = repeat (4, (productivity-module-3))
+    defblock cell () => { assembling-machine-3 (at (0, 0), recipe iron-gear-wheel, modules prod) }
+    cell ()
+  `)
+  assert.deepEqual(
+    scene.entities[0].modules.map((m) => m.name),
+    ['productivity-module-3', 'productivity-module-3', 'productivity-module-3', 'productivity-module-3'],
+  )
+})
+
 test('a parameter answers to its name and to its type', () => {
   const byType = run(`
     defblock cell (recipe r) => { assembling-machine-3 (at (0, 0), recipe r) }
@@ -309,6 +321,22 @@ test('a 3x3 machine exports at the centre of its footprint', () => {
   const { scene } = run('assembling-machine-3 (at (1, 0), recipe iron-gear-wheel)')
   const { json } = exportBlueprint(scene, registry)
   assert.deepEqual(json.blueprint.entities[0].position, { x: 2.5, y: 1.5 })
+})
+
+test('an inserter exports pointing at its pickup, as the game stores it', () => {
+  // Drops south, so it picks up from the north: the game calls that facing north.
+  const { scene } = run('bulk-inserter (at (0, 0), south)\nbulk-inserter (at (1, 0), from south)')
+  const [drops, picks] = exportBlueprint(scene, registry).json.blueprint.entities
+  assert.equal(drops.direction, undefined)
+  assert.equal(picks.direction, 8)
+})
+
+test('a recipe the dataset renamed exports under the name the game knows', async () => {
+  const spaceAge21 = await registryFor('2x1', { ...SPA, id: '2x1' })
+  const { scene } = run('foundry (at (0, 0), recipe copper-ore-melting)', spaceAge21)
+  const { json } = exportBlueprint(scene, spaceAge21)
+  assert.equal(json.blueprint.entities[0].recipe, 'molten-copper')
+  assert.deepEqual(json.blueprint.icons[0].signal, { type: 'recipe', name: 'molten-copper' })
 })
 
 test('a splitter facing east swaps its footprint and uses the 16-point scale', () => {

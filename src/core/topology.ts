@@ -1,4 +1,4 @@
-import { Direction, directionName, oppositeDirection } from './geometry'
+import { Direction, directionName, gameDirection, oppositeDirection } from './geometry'
 import type { PlacedEntity } from './scene'
 
 /**
@@ -120,7 +120,8 @@ export function beltOrientation(entity: PlacedEntity, belts: TileIndex): string 
  * are `in-`/`out-`, and getting that wrong drew every underground facing north.
  */
 export function spriteVariants(entity: PlacedEntity, belts: TileIndex, pipes: TileIndex): string[] {
-  const facing = directionName(entity.dir)
+  // The atlas is cut from the game's prototypes, so it is keyed by the game's direction.
+  const facing = directionName(gameDirection(entity.proto.kind, entity.dir))
   const candidates: string[] = []
 
   switch (entity.proto.kind) {

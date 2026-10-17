@@ -90,6 +90,17 @@ export function oppositeDirection(dir: number): number {
   return (dir + 8) % 16
 }
 
+/**
+ * The direction the game stores for an entity. They agree for everything except inserters:
+ * a program says where an inserter drops (`from south` means it faces north), while the game
+ * points an inserter at its pickup — its prototype picks up at (0, -1) when facing north. A
+ * blueprint or a sprite that took the program's direction as it stood had every inserter
+ * working backwards.
+ */
+export function gameDirection(kind: string, dir: number): number {
+  return kind === 'inserter' ? oppositeDirection(dir) : dir
+}
+
 /** Direction of the straight segment from `a` to `b`, or undefined if it is not axis-aligned. */
 export function directionBetween(a: Vec, b: Vec): number | undefined {
   if (a.x === b.x && a.y === b.y) return undefined

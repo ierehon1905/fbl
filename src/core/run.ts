@@ -34,6 +34,12 @@ interface BlockDef {
   name: string
   params: Param[]
   body: Stmt[]
+  /**
+   * Where the block was written. Its body sees the `def`s around it, as the checker already
+   * assumes — without this a module-level `def prod = …` used inside a block fell through to
+   * a bare name, and `modules prod` placed a module called "prod" without a word.
+   */
+  scope: Scope
 }
 
 /**
@@ -130,13 +136,13 @@ export class Runtime {
     for (const statement of module.statements) {
       if (statement.kind === 'defrecord') this.defineRecord(statement)
     }
+    const scope = new Scope()
     for (const statement of module.statements) {
       if (statement.kind === 'defblock') {
-        this.blocks.set(statement.name, { name: statement.name, params: statement.params, body: statement.body })
+        this.blocks.set(statement.name, { name: statement.name, params: statement.params, body: statement.body, scope })
       }
     }
 
-    const scope = new Scope()
     this.autoRuns.length = 0
     this.runStatements(module.statements, scope)
     this.settleAutoRuns()
@@ -152,7 +158,7 @@ export class Runtime {
   private runStatement(statement: Stmt, scope: Scope): void {
     switch (statement.kind) {
       case 'defblock':
-        this.blocks.set(statement.name, { name: statement.name, params: statement.params, body: statement.body })
+        this.blocks.set(statement.name, { name: statement.name, params: statement.params, body: statement.body, scope })
         return
 
       case 'defrecord':
@@ -823,7 +829,7 @@ export class Runtime {
     )
     const filled = this.fillSlots(args, slots, block.name, scope, false)
 
-    const inner = new Scope()
+    const inner = block.scope.child()
     for (const param of block.params) {
       const value = filled.has(param.name)
         ? filled.get(param.name)!
