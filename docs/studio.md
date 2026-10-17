@@ -3,6 +3,22 @@
 The editor page: code on the left, blueprint on the right, no backend. What the editor knows,
 what the preview draws, and the panels that read numbers off the scene.
 
+## Opening it
+
+Nothing is usable until everything is in. The game data, the item icons and the entity art all
+load behind one gate across the whole page, listed with what each has downloaded so far, and the
+studio appears when the last of them lands.
+
+It used to let you in as soon as the dataset arrived and let the art catch up. That works, and
+it means a reader who opens the page mid-download watches the blueprint change under them twice
+— footprints, then icons, then sprites. Waiting is the lesser surprise.
+
+The gate never holds the page hostage. An asset that cannot be had at all is marked and the rest
+opens anyway; only the dataset is fatal, because without recipes and footprints there is nothing
+to compile. And anything still going after thirty seconds gives up its claim on the gate and
+finishes in the background, landing on the canvas when it arrives — so a request that never
+answers costs half a minute rather than the session.
+
 ## Preview
 
 The game's own art, drawn in the game's render order — belts and pipes on the ground, machines

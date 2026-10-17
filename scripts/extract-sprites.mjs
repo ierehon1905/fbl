@@ -14,6 +14,7 @@
  */
 
 import { copyFileSync, existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -856,11 +857,18 @@ const png = await sharp({
 
 await writeFile(join(outDir, 'atlas.png'), png)
 
+// What the browser keys its copy of the atlas on. GitHub Pages dates its ETags by the file's
+// mtime, so every deploy looks like a change to it and a ten-minute cache window turns into a
+// thirteen-megabyte download; the studio keeps the art itself, under this hash, and only goes
+// to the network when the art is actually different.
+const hash = createHash('sha256').update(png).digest('hex').slice(0, 12)
+
 await writeFile(
   join(outDir, 'atlas.json'),
   JSON.stringify(
     {
       gameVersion,
+      hash,
       pixelsPerTile,
       width: atlas.width,
       height: atlas.height,

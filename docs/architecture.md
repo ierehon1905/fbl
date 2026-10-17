@@ -79,6 +79,13 @@ Game data is kept out of `main`, two different ways:
   `access-control-allow-origin: *`. `npm run fetch-data` puts a local copy under `public/data/`
   for development, and the loader prefers it whenever it is there. CI fetches a copy to run the
   tests, then deletes it before building, because Vite copies `public/` verbatim.
+**Caching, and what Pages does to it.** GitHub Pages allows ten minutes of freshness and dates
+its ETags by file mtime, so a deploy invalidates everything it publishes — including files it
+did not change. Vite's hashed bundle names do not help: same URL, new ETag, full body. It is
+only worth engineering around for the thing big enough to notice, which is the 13 MB sprite
+atlas; that one the studio keeps in Cache Storage keyed by a content hash, and
+[sprites.md](sprites.md) explains how.
+
 - **The sprite atlas lives on the `assets` branch.** It cannot be built in CI — the extractor
   reads the game's own PNGs — so it has to be committed somewhere, and 12MB has no business in
   the history of every clone of the source. The deploy workflow checks that branch out into

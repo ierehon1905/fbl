@@ -16,6 +16,34 @@ The extractor finds a Steam or /Applications install by itself; override with `-
 sharpness when zoomed in. Without an atlas the studio still runs: every entity is drawn
 as a colour-coded footprint instead of its art, and the console says why.
 
+### The browser keeps its own copy
+
+Thirteen megabytes is too much to download twice, and the HTTP cache will not stop it. GitHub
+Pages serves with `cache-control: max-age=600` and an ETag built from the file's **modification
+time and size** — `"6ace5e4a-1b66a0"` — so every deploy stamps a new ETag on every file, whether
+or not anything in it changed. Ten minutes later the browser revalidates, is told the file is
+new, and pulls the whole atlas again. Deploy on a Tuesday afternoon and everyone who visits
+afterwards pays for art that has not changed since August.
+
+So the studio keeps the art itself, under the one thing that does change when the art changes:
+a hash of the PNG's contents, written into `atlas.json`. `loadAtlas` stores the bytes in Cache
+Storage keyed by it, so a second visit asks the network for the manifest — 72 kB, and it is what
+carries the hash — and nothing else. When the hash is new the art is fetched once and the old
+entry is dropped.
+
+**Nobody has to remember to make that happen.** The extractor writes the hash, and so does the
+build (`scripts/stamp-atlas.mjs`), which matters because the atlas is not built in CI: it is
+fetched from the `assets` branch, which may hold a manifest made before any of this existed.
+The build stamps whatever it finds, every time, and does nothing at all when there is no atlas.
+
+And if a manifest somehow arrives without one, caching still happens: the manifest's own text
+stands in as the key. It carries the game version, the sheet's dimensions and the rectangle of
+every sprite on it, so art that changed without changing any of those would have to be a
+recompression of an identical layout.
+
+Every part of it is optional beyond that: no Cache Storage, a private window, a quota refusal —
+each falls through to a plain fetch, which is what happened before.
+
 Hold **Alt** over the preview and the tile under the cursor lights up with its coordinate, ready
 to type into the source — negative numbers and all. The hover tooltip stands aside while it is
 up, since it would cover the thing being read.

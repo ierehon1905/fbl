@@ -47,8 +47,6 @@
               <aside id="cost" class="panel" hidden></aside>
               <aside id="rates" class="panel" hidden></aside>
             </div>
-            <div id="loading" class="loading">loading game data…</div>
-            <div id="preload" class="preload" hidden></div>
             <nav id="trail" class="trail" hidden></nav>
             <aside id="entity" class="entity-panel" hidden></aside>
           </div>
@@ -61,6 +59,15 @@
 
       <div id="scrim" class="scrim" hidden></div>
       <aside id="drawer" class="drawer" hidden></aside>
+    </div>
+
+    <!-- Over everything until the game data, the icons and the art are all in. -->
+    <div id="gate" class="gate">
+      <div class="gate-card">
+        <span class="brand">fbl<span class="brand-dim">/studio</span></span>
+        <div id="gate-rows" class="gate-rows"></div>
+        <p id="gate-note" class="gate-note" hidden></p>
+      </div>
     </div>
     <script type="module" src="/src/ui/main.ts"></script>
   </body>

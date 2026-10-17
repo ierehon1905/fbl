@@ -41,8 +41,10 @@ const dom = {
   editor: el('editor'),
   canvas: el<HTMLCanvasElement>('canvas'),
   tooltip: el('tooltip'),
-  loading: el('loading'),
-  preload: el('preload'),
+  gate: el('gate'),
+  gateRows: el('gate-rows'),
+  gateNote: el('gate-note'),
+  app: el('app'),
   console: el('console'),
   docs: el('docs'),
   cost: el('cost'),
@@ -65,7 +67,7 @@ const dom = {
 }
 
 const preview = new BlueprintCanvas(dom.canvas, dom.tooltip)
-const preloader = new Preloader(dom.loading, dom.preload)
+const preloader = new Preloader(dom.gate, dom.gateRows, dom.gateNote, dom.app)
 
 /** Shared with the language providers, which read it on every keystroke. */
 const host: { registry: ProtoRegistry | null; blocks: BlockSignature[] } = { registry: null, blocks: [] }
@@ -292,7 +294,10 @@ bindPanel<RateSection>(dom.rates, 'fbl.rates', () => rateView, (view) => (rateVi
 
 async function selectVersion(id: string): Promise<void> {
   const mine = ++generation
-  preloader.begin(`loading ${id}…`)
+  // Named before it is asked for, so the gate lists what it is waiting on from the first
+  // frame rather than growing a row at a time as each request gets going.
+  preloader.track('dataset', 'game data')
+  preloader.track(`icons:${id}`, 'item icons')
   writeStorage(STORAGE_VERSION, id)
 
   let loaded
@@ -300,10 +305,11 @@ async function selectVersion(id: string): Promise<void> {
     loaded = await loadDataset(id)
   } catch (error) {
     if (mine !== generation) return
-    preloader.fail(error instanceof Error ? error.message : String(error))
+    preloader.failed('dataset', error instanceof Error ? error.message : String(error), true)
     return
   }
   if (mine !== generation) return
+  preloader.finish('dataset', loaded.profile.label)
 
   // The dataset is all that compiling needs, so the studio opens now and the art catches up.
   host.registry = new ProtoRegistry(loaded.data, loaded.profile)
@@ -315,17 +321,17 @@ async function selectVersion(id: string): Promise<void> {
     return { inputs: count(recipe.in), outputs: count(recipe.out) }
   })
   dom.docs.innerHTML = renderDocs(host.registry)
-  preloader.done()
   build()
   preview.fit()
 
   const iconsUrl = loaded.iconsUrl
-  void loadImage(iconsUrl, preloader.track(`icons:${id}`, 'item icons')).then((icons) => {
-    preloader.finish(`icons:${id}`)
+  void loadImage(iconsUrl, preloader.feed(`icons:${id}`)).then((icons) => {
     if (mine !== generation) return
     iconSheet = icons ? { url: iconsUrl, width: icons.naturalWidth, height: icons.naturalHeight } : null
     preview.setIcons(icons, (name: string) => host.registry?.icons.get(name))
     drawPanels()
+    if (icons) preloader.finish(`icons:${id}`)
+    else preloader.failed(`icons:${id}`, 'not available')
   })
 }
 
@@ -467,15 +473,16 @@ dom.tabs.addEventListener('click', (event) => {
 // ── The game's art ────────────────────────────────────────────────────────────
 
 void loadAtlas(preloader.track('sprites', 'entity sprites')).then((atlas) => {
-  preloader.finish('sprites')
   preview.setAtlas(atlas)
 
   // Without a local install there is no art, and the canvas falls back to footprints on its
   // own. Saying so once beats leaving someone to wonder why the game looks like a diagram.
   if (!atlas) {
+    preloader.failed('sprites', 'no local install')
     log('warning', 'no entity sprites — run `npm run extract-sprites` with Factorio installed')
     return
   }
+  preloader.finish('sprites', `Factorio ${atlas.manifest.gameVersion}`)
   dom.art.textContent = `Factorio ${atlas.manifest.gameVersion}`
 })
 
