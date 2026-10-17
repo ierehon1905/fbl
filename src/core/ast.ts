@@ -11,9 +11,17 @@ export interface TypeExpr {
 // ── Expressions ───────────────────────────────────────────────────────────────
 
 export type Expr =
-  | { kind: 'number'; value: number; loc: Loc }
-  | { kind: 'text'; value: string; loc: Loc }
-  | { kind: 'name'; name: string; loc: Loc }
+  /**
+   * `end` is where the token stops, and only the literals carry it.
+   *
+   * It is what lets a value be replaced in the source rather than described: a recipe, a
+   * direction and a count are each one token, so each has a span an edit can splice. Anything
+   * computed deliberately has none — `x + i * 3` cannot be changed by an example, and the
+   * absence of a span is how that is said.
+   */
+  | { kind: 'number'; value: number; loc: Loc; end?: Loc }
+  | { kind: 'text'; value: string; loc: Loc; end?: Loc }
+  | { kind: 'name'; name: string; loc: Loc; end?: Loc }
   /**
    * `entries` is the same list as written, kept because an item may itself be `name (…)` —
    * a nested call, not a label. Only whoever knows what is callable can tell them apart.
@@ -27,7 +35,8 @@ export type Expr =
   | { kind: 'field'; target: Expr; field: string; loc: Loc }
   /** `lines[0]` — one item out of a list, or the x or y of a coordinate. */
   | { kind: 'index'; target: Expr; index: Expr; loc: Loc }
-  | { kind: 'call'; callee: string; args: Arg[]; loc: Loc }
+  /** `close` is the closing bracket, which is where a new argument would be written. */
+  | { kind: 'call'; callee: string; args: Arg[]; loc: Loc; close?: Loc }
   | { kind: 'measure'; body: Expr; loc: Loc }
 
 /** `recipe r` is labelled; `north` is bare and finds its slot by type. */

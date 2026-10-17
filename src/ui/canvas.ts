@@ -1,6 +1,17 @@
-import { directionName, tileIndex, type PlacedEntity, type PowerReport, type TileIndex } from '../core'
+import {
+  directionName,
+  rotateSize,
+  tileIndex,
+  walkPath,
+  type PlacedEntity,
+  type PowerReport,
+  type Prototype,
+  type TileIndex,
+  type Vec,
+} from '../core'
 import type { LabIcon } from '../data/dataset'
 import type { LoadedAtlas, SpriteRect } from '../data/sprites'
+import { originText } from './provenance'
 import { buildVariantKeys } from './variants'
 
 /** Item icons sit on a 66px grid but are 64px wide, leaving a 2px gutter. */
@@ -42,8 +53,6 @@ function laneVector(dir: number, side: 'left' | 'right'): { x: number; y: number
   return side === 'left' ? left : { x: -left.x, y: -left.y }
 }
 
-export type ViewMode = 'sprites' | 'schematic'
-
 const TIER_TINT: Record<string, string> = {
   'transport-belt': '#c8a53a',
   'fast-transport-belt': '#c0392b',
@@ -82,6 +91,15 @@ interface Camera {
   scale: number
 }
 
+/**
+ * What the cursor is holding.
+ *
+ * A belt is drawn out by dragging and everything else is put down a tile at a time, which is
+ * the same split the game makes — and it is why the two are one type rather than two tools:
+ * what the left button does is decided by what is in the hand, and nowhere else.
+ */
+export type Held = { kind: 'belt' } | { kind: 'entity'; proto: Prototype; dir: number }
+
 export class BlueprintCanvas {
   private readonly ctx: CanvasRenderingContext2D
   private camera: Camera = { x: 0, y: 0, scale: 24 }
@@ -98,11 +116,24 @@ export class BlueprintCanvas {
   private iconSheet: HTMLImageElement | null = null
   private icons: (name: string) => LabIcon | undefined = () => undefined
   private fluidsOf: (recipe: string) => { inputs: number; outputs: number } | undefined = () => undefined
-  private mode: ViewMode = 'sprites'
 
   private power: PowerReport | null = null
   private showPower = false
   private hovered: PlacedEntity | null = null
+  private selected: PlacedEntity | null = null
+  /** Everything the caret in the editor is currently pointing at. */
+  private lit = new Set<PlacedEntity>()
+  private onSelect: (entity: PlacedEntity | null) => void = () => {}
+  /** What the cursor is holding, if anything. While it holds something the left button builds. */
+  private tool: Held | null = null
+  private onHovered: (entity: PlacedEntity | null) => void = () => {}
+  /** The run being dragged out, in tiles, from the press to wherever the pointer is now. */
+  private drawing: { from: Vec; to: Vec } | null = null
+  private onDrawn: (run: { from: Vec; corner?: Vec; to: Vec }) => void = () => {}
+  private onPlaced: (at: Vec, room: boolean) => void = () => {}
+  private onMined: (entity: PlacedEntity | null) => void = () => {}
+  /** The art for what is held, worked out once when it is picked up or turned. */
+  private heldArt: SpriteRect | null = null
   private pointer: { x: number; y: number } | null = null
   private frame = 0
 
@@ -134,11 +165,8 @@ export class BlueprintCanvas {
   setAtlas(atlas: LoadedAtlas | null): void {
     this.atlas = atlas
     this.recomputeVariants()
-    this.requestRender()
-  }
-
-  setMode(mode: ViewMode): void {
-    this.mode = mode
+    // The art in the hand came from the atlas that has just been replaced.
+    if (this.tool?.kind === 'entity') this.heldArt = this.artFor(this.tool)
     this.requestRender()
   }
 
@@ -152,12 +180,92 @@ export class BlueprintCanvas {
     this.requestRender()
   }
 
-  get spritesAvailable(): boolean {
-    return this.atlas !== null
+  /** Told when the selection changes, including when a click lands on nothing. */
+  onSelectionChange(listener: (entity: PlacedEntity | null) => void): void {
+    this.onSelect = listener
   }
 
-  get gameVersion(): string | null {
-    return this.atlas?.manifest.gameVersion ?? null
+  /**
+   * What the caret is over, lit up. A statement inside a loop made two dozen of these and the
+   * picture cannot say so on its own; this is the only way to see which ones a line produced.
+   */
+  setLit(entities: Iterable<PlacedEntity>): void {
+    this.lit = new Set(entities)
+    this.requestRender()
+  }
+
+  get selection(): PlacedEntity | null {
+    return this.selected
+  }
+
+  /** Puts something in the cursor, or empties it. Nothing else changes what the mouse does. */
+  setTool(tool: Held | null): void {
+    this.tool = tool
+    this.drawing = null
+    this.heldArt = tool?.kind === 'entity' ? this.artFor(tool) : null
+    this.canvas.style.cursor = tool ? 'crosshair' : ''
+    this.requestRender()
+  }
+
+  /**
+   * The sprite a held entity would be drawn with, from the same variant chooser the placed
+   * ones go through — so the thing under the cursor is the thing that lands, rather than a
+   * rectangle standing in for it.
+   *
+   * Resolved against itself alone rather than against the scene: the neighbour-aware variants
+   * are for belts and pipes joining up, and rebuilding the whole map's keys on every pointer
+   * move to curve a ghost would cost more than the curve is worth.
+   */
+  private artFor(held: Extract<Held, { kind: 'entity' }>): SpriteRect | null {
+    if (!this.atlas) return null
+    const size = rotateSize(held.proto.size, held.proto.rotatable ? held.dir : 0)
+    const ghost: PlacedEntity = {
+      proto: held.proto,
+      x: 0,
+      y: 0,
+      w: size.x,
+      h: size.y,
+      dir: held.proto.rotatable ? held.dir : 0,
+    }
+    return buildVariantKeys([ghost], this.atlas.manifest).get(ghost) ?? null
+  }
+
+  /** Told when a run has been dragged out and let go of. */
+  onDraw(listener: (run: { from: Vec; corner?: Vec; to: Vec }) => void): void {
+    this.onDrawn = listener
+  }
+
+  /** Told when a tile is clicked while something is held, and whether it would fit there. */
+  onPlace(listener: (at: Vec, room: boolean) => void): void {
+    this.onPlaced = listener
+  }
+
+  /** Told when the right button goes down — mining, in the game's terms. */
+  onMine(listener: (entity: PlacedEntity | null) => void): void {
+    this.onMined = listener
+  }
+
+  /**
+   * Told whenever the entity under the pointer changes.
+   *
+   * The game calls that entity "selected" and acts on it directly: hover and press R and it
+   * turns, with nothing clicked. Everything here that works without a click works off this.
+   */
+  onHover(listener: (entity: PlacedEntity | null) => void): void {
+    this.onHovered = listener
+  }
+
+  /** Where the pointer is, in tiles, or nothing when it is off the map. */
+  get tile(): Vec | null {
+    if (!this.pointer) return null
+    const world = this.toWorld(this.pointer.x, this.pointer.y)
+    return { x: Math.floor(world.x), y: Math.floor(world.y) }
+  }
+
+  select(entity: PlacedEntity | null): void {
+    this.selected = entity
+    this.requestRender()
+    this.onSelect(entity)
   }
 
   setScene(entities: PlacedEntity[], clashing: Set<PlacedEntity>): void {
@@ -168,10 +276,21 @@ export class BlueprintCanvas {
       (a, b) => layerOf(a) - layerOf(b) || a.y + a.h - (b.y + b.h) || a.x - b.x,
     )
     this.recomputeVariants()
-    // The old hover no longer refers to anything on screen.
-    this.hovered = null
+    // The old hover no longer refers to anything on screen. The selection is followed across
+    // the rebuild instead of dropped: the source changed under it, but the thing the reader
+    // was looking at is almost always still there, one line further down.
+    this.clearHover()
+    this.selected = this.selected ? (this.sameAgain(this.selected) ?? null) : null
+    this.lit.clear()
     this.tooltip.hidden = true
     this.requestRender()
+  }
+
+  /** The entity in the new scene that stands where the old one did, if any. */
+  private sameAgain(old: PlacedEntity): PlacedEntity | undefined {
+    return this.entities.find(
+      (entity) => entity.x === old.x && entity.y === old.y && entity.proto.name === old.proto.name,
+    )
   }
 
   private recomputeVariants(): void {
@@ -239,7 +358,7 @@ export class BlueprintCanvas {
       this.probing = on
       // The entity tooltip would sit over the very thing being read.
       if (on) {
-        this.hovered = null
+        this.clearHover()
         this.tooltip.hidden = true
       } else this.updateHover()
       this.requestRender()
@@ -254,23 +373,63 @@ export class BlueprintCanvas {
   private bindPointer(): void {
     let dragging = false
     let last = { x: 0, y: 0 }
+    // Where the press landed and how far it has travelled since. The left button both pans
+    // and selects, and what tells them apart is whether the pointer went anywhere: a few
+    // pixels of shake while clicking is still a click.
+    let travelled = 0
+    const CLICK_SLOP = 4
+
+    // The browser's own menu would eat the button the game mines with.
+    this.canvas.addEventListener('contextmenu', (event) => event.preventDefault())
 
     this.canvas.addEventListener('pointerdown', (event) => {
-      dragging = true
-      last = { x: event.clientX, y: event.clientY }
+      if (event.button === 2) {
+        event.preventDefault()
+        this.onMined(this.entityAt(event.clientX, event.clientY))
+        return
+      }
+
       this.canvas.setPointerCapture(event.pointerId)
+
+      if (this.tool?.kind === 'entity') {
+        const tile = this.tileAt(event.clientX, event.clientY)
+        const size = rotateSize(this.tool.proto.size, this.tool.proto.rotatable ? this.tool.dir : 0)
+        this.onPlaced(tile, this.roomAt(tile, size))
+        return
+      }
+
+      if (this.tool) {
+        const tile = this.tileAt(event.clientX, event.clientY)
+        this.drawing = { from: tile, to: tile }
+        this.requestRender()
+        return
+      }
+
+      dragging = true
+      travelled = 0
+      last = { x: event.clientX, y: event.clientY }
       this.canvas.style.cursor = 'grabbing'
     })
 
     this.canvas.addEventListener('pointerup', (event) => {
-      dragging = false
       this.canvas.releasePointerCapture(event.pointerId)
+
+      if (this.drawing) {
+        const run = this.runOf(this.drawing)
+        this.drawing = null
+        this.requestRender()
+        this.onDrawn(run)
+        return
+      }
+
+      dragging = false
       this.canvas.style.cursor = ''
+      if (travelled <= CLICK_SLOP) this.select(this.entityAt(event.clientX, event.clientY))
     })
 
     this.canvas.addEventListener('pointerleave', () => {
       this.pointer = null
-      this.hovered = null
+      this.clearHover()
       this.tooltip.hidden = true
       this.requestRender()
     })
@@ -279,7 +438,14 @@ export class BlueprintCanvas {
       const rect = this.canvas.getBoundingClientRect()
       this.pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top }
 
+      if (this.drawing) {
+        this.drawing = { from: this.drawing.from, to: this.tileAt(event.clientX, event.clientY) }
+        this.requestRender()
+        return
+      }
+
       if (dragging) {
+        travelled += Math.abs(event.clientX - last.x) + Math.abs(event.clientY - last.y)
         this.camera.x -= (event.clientX - last.x) / this.camera.scale
         this.camera.y -= (event.clientY - last.y) / this.camera.scale
         last = { x: event.clientX, y: event.clientY }
@@ -313,12 +479,57 @@ export class BlueprintCanvas {
     )
   }
 
+  private clearHover(): void {
+    if (this.hovered === null) return
+    this.hovered = null
+    this.onHovered(null)
+  }
+
+  /** The tile under a point in client coordinates. */
+  private tileAt(clientX: number, clientY: number): Vec {
+    const rect = this.canvas.getBoundingClientRect()
+    const world = this.toWorld(clientX - rect.left, clientY - rect.top)
+    return { x: Math.floor(world.x), y: Math.floor(world.y) }
+  }
+
+  /**
+   * The run a drag describes: along the axis it moved furthest in first, then the other. That
+   * is the shape the game draws, and it is the shape `via` writes down — one corner, no
+   * diagonals, no guessing at what a wandering pointer meant.
+   */
+  private runOf({ from, to }: { from: Vec; to: Vec }): { from: Vec; corner?: Vec; to: Vec } {
+    if (from.x === to.x || from.y === to.y) return { from, to }
+    const alongX = Math.abs(to.x - from.x) >= Math.abs(to.y - from.y)
+    return { from, corner: alongX ? { x: to.x, y: from.y } : { x: from.x, y: to.y }, to }
+  }
+
+  /** The tiles the run being dragged covers, exactly as the compiler will expand them. */
+  private previewTiles(): Vec[] {
+    if (!this.drawing) return []
+    const run = this.runOf(this.drawing)
+    return walkPath(run.corner ? [run.from, run.corner, run.to] : [run.from, run.to]) ?? []
+  }
+
+  /** The topmost entity under a point in client coordinates, matching what the eye picks. */
+  private entityAt(clientX: number, clientY: number): PlacedEntity | null {
+    const rect = this.canvas.getBoundingClientRect()
+    const world = this.toWorld(clientX - rect.left, clientY - rect.top)
+    const tileX = Math.floor(world.x)
+    const tileY = Math.floor(world.y)
+
+    for (let i = this.drawOrder.length - 1; i >= 0; i--) {
+      const e = this.drawOrder[i]
+      if (tileX >= e.x && tileX < e.x + e.w && tileY >= e.y && tileY < e.y + e.h) return e
+    }
+    return null
+  }
+
   private updateHover(): void {
     if (!this.pointer) return
     // While the ruler is up, the tooltip and the hover ring would both compete with the very
     // thing being read — and the ring is the same colour as it.
     if (this.probing) {
-      this.hovered = null
+      this.clearHover()
       this.tooltip.hidden = true
       return
     }
@@ -336,8 +547,15 @@ export class BlueprintCanvas {
       }
     }
 
-    this.hovered = found
-    if (!found) {
+    if (found !== this.hovered) {
+      this.hovered = found
+      this.onHovered(found)
+    }
+
+    // Holding something makes the cursor the subject: the game stops describing what is under
+    // it, because what matters is the thing about to be put down. What is under it is still
+    // tracked — the pipette and R work off it — so only the tooltip and the ring go quiet.
+    if (!found || this.tool) {
       this.tooltip.hidden = true
       return
     }
@@ -368,6 +586,11 @@ export class BlueprintCanvas {
     if (found.splitterFilter) lines.push(`filter ${found.splitterFilter} → ${found.outPriority ?? 'left'}`)
     if (found.inPriority) lines.push(`takes from ${found.inPriority}`)
     if (found.outPriority) lines.push(`gives to ${found.outPriority}`)
+
+    // Last, dim, and separated: where in the source this one came from. It is the answer to
+    // the question a generated blueprint cannot otherwise be asked.
+    const where = originText(found)
+    if (where) lines.push(`<hr><span class="dim">${where}</span>`)
 
     this.tooltip.innerHTML = lines.join('\n')
     this.tooltip.hidden = false
@@ -413,10 +636,119 @@ export class BlueprintCanvas {
 
     this.drawOrigin()
     this.drawProbe()
+    this.drawGhost()
+  }
+
+  /**
+   * The run being dragged, as it will be built. Drawn from the same expansion the compiler
+   * uses, so the ghost is a promise rather than an impression — and a tile that already holds
+   * something is marked, because that is where `auto` will have to dive under.
+   */
+  private drawGhost(): void {
+    if (this.tool?.kind === 'entity') return this.drawHeldGhost(this.tool)
+
+    const tiles = this.previewTiles()
+    if (tiles.length === 0) return
+
+    const ctx = this.ctx
+    const size = this.camera.scale
+    for (const [at, tile] of tiles.entries()) {
+      const origin = this.toScreen(tile.x, tile.y)
+      const blocked = this.occupied.has(`${tile.x},${tile.y}`)
+      ctx.fillStyle = blocked ? 'rgba(255, 90, 80, 0.35)' : 'rgba(255, 174, 63, 0.4)'
+      ctx.fillRect(origin.x + 1, origin.y + 1, size - 2, size - 2)
+
+      // Which way this tile carries: towards the next one, or — at the end — keeping the
+      // heading of the one before. Taken as a pair rather than an axis at a time, because a
+      // corner tile has a different answer on each axis and mixing them points diagonally.
+      const ahead = tiles[at + 1]
+      const behind = tiles[at - 1]
+      const step = ahead
+        ? { x: ahead.x - tile.x, y: ahead.y - tile.y }
+        : behind
+          ? { x: tile.x - behind.x, y: tile.y - behind.y }
+          : { x: 0, y: 0 }
+      const dx = Math.sign(step.x)
+      const dy = Math.sign(step.y)
+      if (dx === 0 && dy === 0) continue
+
+      const mid = { x: origin.x + size / 2, y: origin.y + size / 2 }
+      const arm = size * 0.22
+      ctx.strokeStyle = 'rgba(20, 23, 28, 0.85)'
+      ctx.lineWidth = Math.max(1.5, size * 0.09)
+      ctx.beginPath()
+      ctx.moveTo(mid.x - dx * arm + dy * arm, mid.y - dy * arm - dx * arm)
+      ctx.lineTo(mid.x + dx * arm, mid.y + dy * arm)
+      ctx.lineTo(mid.x - dx * arm - dy * arm, mid.y - dy * arm + dx * arm)
+      ctx.stroke()
+    }
+  }
+
+  /**
+   * The thing in the cursor, standing where it would land. Red when it would not fit, which
+   * is the game's own way of saying so and needs no words.
+   */
+  private drawHeldGhost(held: Extract<Held, { kind: 'entity' }>): void {
+    const tile = this.tile
+    if (!tile) return
+
+    const size = rotateSize(held.proto.size, held.proto.rotatable ? held.dir : 0)
+    const clear = this.roomAt(tile, size)
+    const origin = this.toScreen(tile.x, tile.y)
+    const scale = this.camera.scale
+    const ctx = this.ctx
+
+    // The entity's own art, see-through, the way the game holds one. Where there is no art —
+    // no local install — the footprint says the same thing more plainly.
+    const art = this.useSprites() ? this.heldArt : null
+    if (art) {
+      const atlas = this.atlas!
+      const ppt = atlas.manifest.pixelsPerTile
+      const centre = this.toScreen(tile.x + size.x / 2 + art.ox, tile.y + size.y / 2 + art.oy)
+      ctx.save()
+      ctx.globalAlpha = 0.62
+      ctx.drawImage(atlas.image, art.x, art.y, art.w, art.h, centre.x, centre.y, (art.w / ppt) * scale, (art.h / ppt) * scale)
+      ctx.restore()
+    } else {
+      ctx.fillStyle = clear ? 'rgba(255, 174, 63, 0.32)' : 'rgba(255, 90, 80, 0.38)'
+      ctx.fillRect(origin.x + 1, origin.y + 1, size.x * scale - 2, size.y * scale - 2)
+    }
+
+    // The footprint is outlined either way: it is what says where the thing actually lands,
+    // and art overhangs its own tiles.
+    ctx.strokeStyle = clear ? '#ffae3f' : '#ff5a50'
+    ctx.lineWidth = 2
+    ctx.strokeRect(origin.x + 1, origin.y + 1, size.x * scale - 2, size.y * scale - 2)
+    if (!clear) {
+      ctx.fillStyle = 'rgba(255, 90, 80, 0.28)'
+      ctx.fillRect(origin.x + 1, origin.y + 1, size.x * scale - 2, size.y * scale - 2)
+    }
+
+    if (!held.proto.rotatable || art) return
+    const chevron = { 0: [0, -1], 4: [1, 0], 8: [0, 1], 12: [-1, 0] }[((held.dir % 16) + 16) % 16] ?? [0, -1]
+    const mid = { x: origin.x + (size.x * scale) / 2, y: origin.y + (size.y * scale) / 2 }
+    const arm = Math.min(size.x, size.y) * scale * 0.22
+    ctx.strokeStyle = 'rgba(20, 23, 28, 0.85)'
+    ctx.lineWidth = Math.max(1.5, scale * 0.09)
+    ctx.beginPath()
+    ctx.moveTo(mid.x - chevron[0] * arm + chevron[1] * arm, mid.y - chevron[1] * arm - chevron[0] * arm)
+    ctx.lineTo(mid.x + chevron[0] * arm, mid.y + chevron[1] * arm)
+    ctx.lineTo(mid.x - chevron[0] * arm - chevron[1] * arm, mid.y - chevron[1] * arm + chevron[0] * arm)
+    ctx.stroke()
+  }
+
+  /** Whether a footprint of this size would stand clear at this tile. */
+  private roomAt(tile: Vec, size: Vec): boolean {
+    for (let y = 0; y < size.y; y++) {
+      for (let x = 0; x < size.x; x++) {
+        if (this.occupied.has(`${tile.x + x},${tile.y + y}`)) return false
+      }
+    }
+    return true
   }
 
   private useSprites(): boolean {
-    return this.mode === 'sprites' && this.atlas !== null
+    return this.atlas !== null
   }
 
   private drawGrid(width: number, height: number): void {
@@ -544,7 +876,13 @@ export class BlueprintCanvas {
     }
   }
 
-  /** The colour-coded fallback: used in schematic mode and for anything the atlas lacks. */
+  /**
+   * The colour-coded fallback, for anything there is no art for.
+   *
+   * It is not a view any more — the studio draws the game's own sprites and nothing else — but
+   * it is still what keeps an entity visible when the atlas has no picture of it, or when
+   * there is no atlas at all. Drawing nothing would be a blueprint you cannot see.
+   */
   private drawSchematic(entity: PlacedEntity): void {
     const ctx = this.ctx
     const scale = this.camera.scale
@@ -646,12 +984,45 @@ export class BlueprintCanvas {
     }
     ctx.stroke()
 
-    ctx.strokeStyle = '#ff9f4a'
-    ctx.lineWidth = 2
-    for (const entity of report.unpowered) {
-      const at = this.toScreen(entity.x, entity.y)
-      ctx.strokeRect(at.x + 1, at.y + 1, entity.w * scale - 2, entity.h * scale - 2)
-    }
+    for (const entity of report.unpowered) this.drawNoPower(entity)
+  }
+
+  /**
+   * The mark on something that draws power and is not getting any.
+   *
+   * A badge rather than a ring around the footprint, and deliberately: the accent colour means
+   * "this is what you are pointing at or have picked" everywhere else on this canvas, so an
+   * outline in it around every dark machine read as a selection of all of them. The game marks
+   * these with an icon over the machine too.
+   */
+  private drawNoPower(entity: PlacedEntity): void {
+    const ctx = this.ctx
+    const scale = this.camera.scale
+    const at = this.toScreen(entity.x + entity.w, entity.y)
+    const size = Math.max(11, Math.min(20, scale * 0.6))
+    const x = at.x - size - 2
+    const y = at.y + 2
+
+    ctx.save()
+    ctx.fillStyle = 'rgba(12, 15, 19, 0.86)'
+    ctx.strokeStyle = '#ffcc4a'
+    ctx.lineWidth = 1
+    roundRect(ctx, x, y, size, size, 3)
+    ctx.fill()
+    ctx.stroke()
+
+    // A bolt, drawn rather than fetched: the icon sheet is items, and this is a state.
+    ctx.fillStyle = '#ffcc4a'
+    ctx.beginPath()
+    ctx.moveTo(x + size * 0.58, y + size * 0.16)
+    ctx.lineTo(x + size * 0.3, y + size * 0.54)
+    ctx.lineTo(x + size * 0.47, y + size * 0.54)
+    ctx.lineTo(x + size * 0.4, y + size * 0.84)
+    ctx.lineTo(x + size * 0.7, y + size * 0.44)
+    ctx.lineTo(x + size * 0.52, y + size * 0.44)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
   }
 
   /** Recipe and module badges, collision and hover rings — drawn above every entity. */
@@ -692,8 +1063,26 @@ export class BlueprintCanvas {
       ctx.strokeRect(origin.x + 1, origin.y + 1, w - 2, h - 2)
     }
 
-    if (this.hovered === entity) {
+    // What the caret in the editor made: a wash rather than a ring, because a loop lights up
+    // two dozen at once and two dozen rings is a fence.
+    if (this.lit.has(entity)) {
+      ctx.fillStyle = 'rgba(255, 174, 63, 0.22)'
+      ctx.fillRect(origin.x, origin.y, w, h)
+    }
+
+    if (this.hovered === entity && !this.tool) {
       ctx.strokeStyle = '#ffae3f'
+      ctx.lineWidth = 2
+      ctx.strokeRect(origin.x + 1, origin.y + 1, w - 2, h - 2)
+    }
+
+    // The selection outranks the hover, and says so by being drawn twice: a dark backing so
+    // it reads on top of a bright sprite, and the accent over it.
+    if (this.selected === entity) {
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)'
+      ctx.lineWidth = 4
+      ctx.strokeRect(origin.x + 1, origin.y + 1, w - 2, h - 2)
+      ctx.strokeStyle = '#ffd08a'
       ctx.lineWidth = 2
       ctx.strokeRect(origin.x + 1, origin.y + 1, w - 2, h - 2)
     }

@@ -46,7 +46,13 @@ src/ui/base.css    palette, reset, toolbar — both pages start here
 npm test          # bundles the core for Node, then runs every test
 npm run dev       # http://localhost:5273
 npm run build     # typecheck, then both pages
+npm run audit     # asks the solver for every craftable item in all four datasets
+npm run charts    # redraws the figures in docs/quality-strategy.md
 ```
+
+`npm run charts` is the one thing here that is not JavaScript: it solves the ladders in Node and
+draws them with matplotlib, so it needs Python with matplotlib and pillow. Nothing else does,
+and no build or test depends on it.
 
 `npm run build:core` bundles `src/core/index.ts` **and** `src/ui/sankey.ts` for Node, which is
 what the tests import. Anything worth testing has to be reachable from one of those two and
@@ -81,7 +87,7 @@ Game data is kept out of `main`, two different ways:
 
 Nothing blocks on the art. The dataset is all that compiling needs, so the studio opens as soon
 as it lands; the icon sheet and the atlas stream in behind it with a progress chip in the
-corner, and the view upgrades from schematic to sprites when the atlas arrives.
+corner, and the footprints give way to the game's art when the atlas arrives.
 
 The build is ~14MB of code, almost all of it Monaco's lazily-loaded language chunks — the page
 itself pulls about 1MB gzipped, then the 12MB atlas in the background.

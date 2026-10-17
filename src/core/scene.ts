@@ -20,6 +20,60 @@ export interface FilterSpec {
   negated: boolean
 }
 
+/**
+ * One step of the path an entity came by: a block that was called, or a turn of a loop.
+ *
+ * A blueprint is generated, so "where did this one come from" has no answer in the picture —
+ * twenty-four assemblers can be one line of source read twenty-four times. The step records
+ * which reading this was, which is what tells them apart.
+ */
+export interface TraceStep {
+  kind: 'block' | 'loop'
+  /** The block's name, or the loop's variable. */
+  name: string
+  /** For a loop: which turn this was, and how many there were. */
+  at?: number
+  of?: number
+  loc: Loc
+}
+
+/** A stretch of source, from the first character to just past the last. */
+export interface Span {
+  start: Loc
+  end: Loc
+}
+
+/**
+ * Where a slot's value was written — which is what says whether it can be changed by pointing
+ * at the thing it made.
+ *
+ * `span` present means the value is a literal standing in the call, and an edit replaces it.
+ * Absent with `from: 'call'` means it was written but computed, and one example cannot say
+ * which part of `x + i * 3` was meant. Absent otherwise means the call never mentioned it, so
+ * an edit writes a new argument rather than changing an old one.
+ */
+export interface SlotOrigin {
+  from: 'call' | 'defaults' | 'default'
+  span?: Span
+  /** The name it was handed under, when the call passed something it was given rather than wrote. */
+  via?: string
+}
+
+/** The whole path, outermost first. Empty for a statement written at the top of a file. */
+export interface Trace {
+  steps: TraceStep[]
+  /** Where each slot's value came from, for the slots something could be said about. */
+  slots?: Record<string, SlotOrigin>
+  /** The call that placed this, so a new argument has somewhere to go. */
+  call?: Span
+  /**
+   * Where the frame's origin stood when this was placed. Layout combinators move a block
+   * after the fact, so a tile on screen is not the `at` that was written; this is what reads
+   * one back into the other.
+   */
+  origin: { x: number; y: number }
+}
+
 export interface PlacedEntity {
   proto: Prototype
   /** Top-left tile of the footprint *after* rotation, in absolute tile coordinates. */
@@ -43,6 +97,8 @@ export interface PlacedEntity {
   outPriority?: 'left' | 'right'
   splitterFilter?: string
   loc?: Loc
+  /** How this one came to be placed — the calls and loops above it. */
+  trace?: Trace
 }
 
 /**
@@ -77,6 +133,13 @@ export class Scene {
   readonly entities: PlacedEntity[] = []
   readonly diagnostics: Diagnostic[] = []
 
+  /**
+   * What to stamp on everything placed from here on. The runtime sets it as it walks in and
+   * out of blocks and loops; the scene only carries it, which keeps the accumulator ignorant
+   * of the evaluator that fills it.
+   */
+  stamp: (() => Trace) | null = null
+
   get length(): number {
     return this.entities.length
   }
@@ -96,6 +159,9 @@ export class Scene {
       w: size.x,
       h: size.y,
       dir: proto.rotatable ? dir : 0,
+      // Stamped here rather than at each of the seven places that place something, so a belt,
+      // a tunnel end and a balancer's splitters all carry it without being asked to.
+      trace: this.stamp?.(),
       ...extra,
     }
     this.entities.push(entity)

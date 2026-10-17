@@ -37,8 +37,16 @@ const RESERVED = new Set([
   'import',
 ])
 
+/** Where a token stops. `pad` covers what the text left out, which is a string's quotes. */
+const after = (token: Token, pad = 0): Loc => ({ line: token.loc.line, col: token.loc.col + token.text.length + pad })
+
 class Parser {
   private pos = 0
+  /**
+   * The bracket that closed the last argument list, read by the call that opened it — which
+   * is the very next line, so it never has to survive anything.
+   */
+  private lastClose: Loc = { line: 0, col: 0 }
 
   constructor(private readonly tokens: Token[]) {}
 
@@ -390,7 +398,7 @@ class Parser {
       }
     }
 
-    this.expect(')', 'to close an argument list')
+    this.lastClose = this.expect(')', 'to close an argument list').loc
     return { entries, sawComma }
   }
 
@@ -539,12 +547,13 @@ class Parser {
 
     if (token.kind === 'number') {
       this.next()
-      return { kind: 'number', value: Number(token.text), loc: token.loc }
+      return { kind: 'number', value: Number(token.text), loc: token.loc, end: after(token) }
     }
 
     if (token.kind === 'string') {
+      // The quotes are not in the text but they are in the source, so the span covers them.
       this.next()
-      return { kind: 'text', value: token.text, loc: token.loc }
+      return { kind: 'text', value: token.text, loc: token.loc, end: after(token, 2) }
     }
 
     if (token.kind === 'ident') {
@@ -561,9 +570,10 @@ class Parser {
 
       this.next()
       if (this.at('(')) {
-        return { kind: 'call', callee: token.text, args: this.parseArgList(), loc: token.loc }
+        const args = this.parseArgList()
+        return { kind: 'call', callee: token.text, args, loc: token.loc, close: this.lastClose }
       }
-      return { kind: 'name', name: token.text, loc: token.loc }
+      return { kind: 'name', name: token.text, loc: token.loc, end: after(token) }
     }
 
     if (token.kind === 'punct' && token.text === '(') {

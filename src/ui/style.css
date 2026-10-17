@@ -58,6 +58,138 @@
 }
 .tooltip[hidden] { display: none; }
 .tooltip b { color: var(--accent); font-weight: 600; }
+.tooltip hr { margin: 5px 0 4px; border: 0; border-top: 1px solid var(--line); }
+.tooltip .dim { color: var(--text-dim); }
+
+/* ── Where a selected entity came from ───────────────────────────────────── */
+
+/*
+ * Top left of the canvas. The bottom belongs to the cost and rates panels, which are pinned
+ * there, and a breadcrumb that lands under the cost button is a breadcrumb nobody reads.
+ */
+.trail {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  max-width: calc(100% - 20px);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: rgba(12, 15, 19, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-x: auto;
+  z-index: 4;
+}
+.trail[hidden] { display: none; }
+.trail button {
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: inherit;
+  white-space: nowrap;
+}
+.trail button:hover { color: var(--text); background: var(--bg-raised); }
+.trail button:last-child { color: var(--accent); }
+.trail .sep { color: #4a525e; }
+.trail .trail-x { margin-left: 2px; color: #5d6673; }
+
+/* Which game the art came from, where the view toggle used to be. */
+.art { color: var(--text-dim); font-family: var(--font-mono); font-size: 11px; }
+
+/* ── Builder mode ────────────────────────────────────────────────────────── */
+
+/*
+ * The mode rebinds nothing yet — selection already worked — but it is the only place the page
+ * writes to the source, so it says so loudly rather than hiding in a toolbar toggle.
+ */
+body.building .tab-body { box-shadow: inset 0 0 0 2px var(--accent-dim); }
+
+.entity-panel {
+  position: absolute;
+  left: 10px;
+  top: 44px;
+  width: 252px;
+  padding: 8px 10px 10px;
+  background: rgba(12, 15, 19, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 11px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 6;
+}
+.entity-panel[hidden] { display: none; }
+
+.bhead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 7px;
+  margin-bottom: 7px;
+  border-bottom: 1px solid var(--line);
+}
+.bhead b { color: var(--accent); font-weight: 600; }
+.bhead .dim { margin-left: auto; color: var(--text-dim); font-family: var(--font-mono); font-size: 10px; }
+
+/* Every row the same: a label of fixed width, then one control filling the rest of it. */
+.brow { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.brow label { flex: none; width: 46px; color: var(--text-dim); }
+/*
+ * `.pick.wide` is sized for the calculator's rail, where the button is the only thing in its
+ * box: `width: 100%` there means the width of the panel. Here a label sits beside it, so a
+ * hundred percent is a hundred percent *plus* the label, and the control hangs over the card's
+ * edge. It takes what is left instead.
+ */
+.brow .pick,
+.brow .pick.wide {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  min-height: 26px;
+}
+/* The arrow stands where the icons stand on the other rows, so the words start in one place. */
+.brow .bdir {
+  flex: none;
+  width: 18px;
+  text-align: center;
+  font-style: normal;
+  color: var(--accent);
+}
+.brow kbd {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.brow .pick:hover kbd { color: var(--accent); border-color: var(--accent-dim); }
+
+.entity-panel .dim { color: var(--text-dim); }
+/* The keys that work without touching the panel, said once where they are needed. */
+.bkeys {
+  margin: 8px 0 0;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+  color: #5d6673;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.entity-panel p.dim { margin: 6px 0 0; line-height: 1.45; }
+
+.bwarn {
+  margin: 8px 0 0;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+  color: #d8a657;
+  line-height: 1.45;
+}
 
 /* ── Console ─────────────────────────────────────────────────────────────── */
 

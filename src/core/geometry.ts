@@ -112,3 +112,30 @@ export function unionRect(a: Rect | null, b: Rect): Rect {
   const bottom = Math.max(a.y + a.h, b.y + b.h)
   return { x, y, w: right - x, h: bottom - y }
 }
+
+/**
+ * Every tile a belt written as corners actually covers.
+ *
+ * The compiler places from this and the studio draws its preview from it, which is the only
+ * way a ghost can promise what will be built. A diagonal leg is not a belt, so it comes back
+ * as nothing rather than as a guess at what was meant; the caller says so in its own terms.
+ */
+export function walkPath(points: readonly Vec[]): Vec[] | undefined {
+  if (points.length <= 1) return [...points]
+
+  const path: Vec[] = [points[0]]
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i]
+    const b = points[i + 1]
+    const dir = directionBetween(a, b)
+    if (dir === undefined) return undefined
+
+    const step = directionStep(dir)
+    let cursor = a
+    while (cursor.x !== b.x || cursor.y !== b.y) {
+      cursor = vec(cursor.x + step.x, cursor.y + step.y)
+      path.push(cursor)
+    }
+  }
+  return path
+}

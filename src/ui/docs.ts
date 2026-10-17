@@ -525,9 +525,6 @@ syntax — place the path and the bends appear.</p>
 says what to type, negative numbers and all. Reading a coordinate off the picture and writing it
 into the source is most of what moving something means, and counting grid squares is a poor way
 to do it. The tooltip stands aside while the ruler is up.</p>
-<p>The <b>schematic</b> view replaces the art with colour-coded footprints and direction
-chevrons. Easier to read alignment from, and the only view available without a local Factorio
-installation.</p>
 
 <h2>Fluid connections</h2>
 <p>A machine whose recipe uses a fluid grows the pipe stubs the game gives it, on the sides its

@@ -23,7 +23,7 @@ export function buildVariantKeys(entities: PlacedEntity[], atlas: SpriteAtlas): 
       .map((name) => variants[name])
       .find(Boolean)
 
-    // A miss would silently draw some other orientation, so leave it to the schematic
+    // A miss would silently draw some other orientation, so leave it to the footprint
     // fallback instead of guessing.
     if (rect) resolved.set(entity, rect)
   }

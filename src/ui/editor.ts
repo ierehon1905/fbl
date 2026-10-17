@@ -1,7 +1,7 @@
 import * as monaco from 'monaco-editor'
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker'
 
-import type { Diagnostic } from '../core'
+import type { Diagnostic, Loc } from '../core'
 import { configuration, LANGUAGE_ID, monarch, theme, THEME_ID } from './lang/monarch'
 import { registerLanguage, type LanguageHost } from './lang/providers'
 
@@ -15,7 +15,25 @@ export interface Editor {
   setValue(source: string): void
   onChange(listener: (source: string) => void): void
   setDiagnostics(diagnostics: Diagnostic[]): void
-  reveal(line: number, column: number): void
+  /**
+   * Puts the caret on a line and scrolls to it. `focus` is what separates the two callers:
+   * clicking a breadcrumb means "take me there and let me type", while selecting an entity on
+   * the map means "show me where this is" — and stealing the keyboard for that would send the
+   * next keystroke into the source instead of to the thing being edited.
+   */
+  reveal(line: number, column: number, focus?: boolean): void
+  /** Which line the caret is on, whenever it moves. The canvas lights up what that line made. */
+  onCaretLine(listener: (line: number) => void): void
+  /**
+   * Replaces a stretch of the source, as an edit rather than a new document.
+   *
+   * This is what keeps the promise that Ctrl+Z is free: an edit pushed through Monaco lands on
+   * its undo stack, so one change made on the map is one press to take back. Setting the value
+   * outright would work and would throw the history away.
+   */
+  patch(start: Loc, end: Loc, text: string, label: string): void
+  /** Takes back the last edit, whoever made it — the map and the keyboard share one history. */
+  undo(): void
 }
 
 export function createEditor(container: HTMLElement, source: string, host: LanguageHost): Editor {
@@ -88,10 +106,25 @@ export function createEditor(container: HTMLElement, source: string, host: Langu
       )
     },
 
-    reveal(line, column) {
+    reveal(line, column, focus = true) {
       editor.revealPositionInCenter({ lineNumber: line, column })
       editor.setPosition({ lineNumber: line, column })
-      editor.focus()
+      if (focus) editor.focus()
+    },
+
+    onCaretLine(listener) {
+      editor.onDidChangeCursorPosition((event) => listener(event.position.lineNumber))
+    },
+
+    undo() {
+      editor.trigger('map', 'undo', null)
+    },
+
+    patch(start, end, text, label) {
+      const range = new monaco.Range(start.line, start.col, end.line, end.col)
+      editor.pushUndoStop()
+      editor.executeEdits(label, [{ range, text, forceMoveMarkers: true }])
+      editor.pushUndoStop()
     },
   }
 }

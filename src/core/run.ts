@@ -15,10 +15,20 @@ import {
   vec,
   type Rect,
   type Vec,
+  walkPath,
 } from './geometry'
 import type { Prototype, ProtoRegistry } from './proto'
 import { planRoute, type RouteResult, type TileState } from './routing'
-import { Scene, type ContentEntry, type FilterSpec, type ModuleSpec, type PlacedEntity, type SceneTransform } from './scene'
+import {
+  Scene,
+  type ContentEntry,
+  type FilterSpec,
+  type ModuleSpec,
+  type PlacedEntity,
+  type SceneTransform,
+  type SlotOrigin,
+  type TraceStep,
+} from './scene'
 import { bareSlot, blockSlots, entitySlots, findSlot, HELPER_SLOTS, LAYOUT_SLOTS, recordSlots, type SlotDef, DEFAULT_SLOTS } from './slots'
 import { flowsWith, LINE_KINDS } from './topology'
 import { ALIGNMENTS, namedType, ROUTINGS, T, TIERS, TRANSFORMS, UNDERGROUND_TYPES, type Type } from './types'
@@ -87,8 +97,14 @@ export class Runtime {
   private readonly records = new Map<string, RecordDef>()
   /** Records being built right now, so one that holds itself is caught rather than looping. */
   private readonly building: string[] = []
-  /** Block calls being evaluated, innermost last, so `throw` can point at the caller. */
-  private readonly callStack: Array<{ name: string; loc: Loc }> = []
+  /**
+   * How the evaluator got to where it is: block calls and loop turns, innermost last.
+   *
+   * It earns its keep twice. `throw` points at the caller with it, and every placed entity is
+   * stamped with a copy of it, which is the only thing that can answer "which of these
+   * twenty-four is this one" about a generated blueprint.
+   */
+  private readonly callStack: TraceStep[] = []
   /**
    * `auto` belts, laid plainly as they are met and routed once the program has finished.
    *
@@ -108,6 +124,22 @@ export class Runtime {
    */
   private iterationSink: ((from: number, to: number) => void) | null = null
 
+  /**
+   * Where each slot's value was written, collected by `fillSlots` while a placement is
+   * listening and stamped onto the entity afterwards. A field rather than another parameter
+   * on a function that already takes seven, and it is read on the line after it is filled.
+   */
+  private slotOrigins: Map<string, SlotOrigin> | null = null
+
+  /**
+   * The brackets of the call being evaluated, for the stamp to carry.
+   *
+   * Set here rather than in each of the seven things that place something, for the same reason
+   * the trace is: a belt, a tunnel and a balancer's splitters all need it, and none of them
+   * should have to be told.
+   */
+  private callSpan: { start: Loc; end: Loc } | undefined
+
   /** Native helpers the imported libraries unlock. */
   private readonly unlocked: Set<string>
 
@@ -121,6 +153,12 @@ export class Runtime {
 
   run(module: Module): RunResult {
     this.scene = new Scene()
+    // The steps mutate as the loop turns, so each entity takes its own copy of them.
+    this.scene.stamp = () => ({
+      steps: this.callStack.map((step) => ({ ...step })),
+      origin: { x: this.offset.x, y: this.offset.y },
+      call: this.callSpan,
+    })
     this.offset = vec(0, 0)
     this.output.length = 0
     this.blocks.clear()
@@ -195,16 +233,20 @@ export class Runtime {
         const sink = this.iterationSink
         this.iterationSink = null
         const items = this.iterable(this.evaluate(statement.iterable, scope), statement.iterable.loc)
+        const step: TraceStep = { kind: 'loop', name: statement.name, of: items.length, loc: statement.loc }
+        this.callStack.push(step)
         try {
           for (const [at, item] of items.entries()) {
             const inner = scope.child()
             inner.set(statement.name, item)
             if (statement.indexName) inner.set(statement.indexName, at)
+            step.at = at
             const from = this.scene.length
             this.runStatements(statement.body, inner)
             sink?.(from, this.scene.length)
           }
         } finally {
+          this.callStack.pop()
           this.iterationSink = sink
         }
         return
@@ -399,13 +441,23 @@ export class Runtime {
     try {
       if (statement.each) {
         const each = statement.each
-        for (const [at, value] of this.iterable(this.evaluate(each.iterable, scope), each.iterable.loc).entries()) {
-          const inner = scope.child()
-          inner.set(each.name, value)
-          if (each.indexName) inner.set(each.indexName, at)
-          const from = this.scene.length
-          this.runStatements(statement.body, inner)
-          settle(from, this.scene.length)
+        const items = this.iterable(this.evaluate(each.iterable, scope), each.iterable.loc)
+        // `row for i in …` is a loop like any other as far as an entity is concerned, and this
+        // is the loop most of them are actually written in — the plain `for` only repeats.
+        const step: TraceStep = { kind: 'loop', name: each.name, of: items.length, loc: statement.loc }
+        this.callStack.push(step)
+        try {
+          for (const [at, value] of items.entries()) {
+            const inner = scope.child()
+            inner.set(each.name, value)
+            if (each.indexName) inner.set(each.indexName, at)
+            step.at = at
+            const from = this.scene.length
+            this.runStatements(statement.body, inner)
+            settle(from, this.scene.length)
+          }
+        } finally {
+          this.callStack.pop()
         }
       } else {
         for (const child of statement.body) {
@@ -619,6 +671,16 @@ export class Runtime {
   // ── Calls ───────────────────────────────────────────────────────────────────
 
   private evaluateCall(expr: Extract<Expr, { kind: 'call' }>, scope: Scope): Value {
+    const outer = this.callSpan
+    this.callSpan = expr.close ? { start: expr.loc, end: expr.close } : undefined
+    try {
+      return this.dispatchCall(expr, scope)
+    } finally {
+      this.callSpan = outer
+    }
+  }
+
+  private dispatchCall(expr: Extract<Expr, { kind: 'call' }>, scope: Scope): Value {
     // A building held in a variable: `machine (at (0, 0))`.
     const bound = scope.get(expr.callee)
     if (bound) {
@@ -697,6 +759,7 @@ export class Runtime {
         slot = type ? bareSlot(slots, type) : undefined
         if (!slot) fail(`this value needs a label`, form.loc)
         filled.set(slot.name, value)
+        this.noteOrigin(slot.name, form.expr, scope)
         continue
       }
 
@@ -711,17 +774,38 @@ export class Runtime {
       // Content and filters are read from the arguments as written, not evaluated: the
       // pairing and the `not` live in the syntax and a value would flatten them away.
       filled.set(slot.name, slot.type.k === 'content' || slot.type.k === 'filters' ? null : this.evaluate(form.expr, scope))
+      this.noteOrigin(slot.name, form.expr, scope)
     }
 
     if (applyDefaults && target) {
       for (const slot of slots) {
         if (filled.has(slot.name)) continue
         const fallback = this.lookupDefault(slot.name, target)
-        if (fallback !== undefined) filled.set(slot.name, fallback)
+        if (fallback !== undefined) {
+          filled.set(slot.name, fallback)
+          this.slotOrigins?.set(slot.name, { from: 'defaults' })
+        }
       }
     }
 
     return filled
+  }
+
+  /**
+   * What was written for a slot, when it can be pointed at. A literal carries its own span
+   * and can be replaced; anything computed is recorded as written and nothing more, which is
+   * how an edit later knows to refuse rather than guess.
+   */
+  private noteOrigin(name: string, expr: Expr, scope: Scope): void {
+    if (!this.slotOrigins) return
+
+    // A bare word is a literal only if it is not standing for something else. `recipe r`
+    // inside a block looks exactly like `recipe iron-gear-wheel` and is the opposite of it:
+    // replacing the text would rename the parameter and change every entity the block makes.
+    const variable = expr.kind === 'name' && scope.get(expr.name) ? expr.name : undefined
+    const written = expr.kind === 'number' || expr.kind === 'text' || (expr.kind === 'name' && !variable)
+    const end = written ? expr.end : undefined
+    this.slotOrigins.set(name, { from: 'call', span: end ? { start: expr.loc, end } : undefined, via: variable })
   }
 
   /** The record a slot holds, whether it takes one or a list of them. */
@@ -837,7 +921,7 @@ export class Runtime {
     }
 
     const at = filled.has('at') ? this.toVec(filled.get('at')!, 'at', loc) : vec(0, 0)
-    this.callStack.push({ name: block.name, loc })
+    this.callStack.push({ kind: 'block', name: block.name, loc })
     try {
       return this.inFrame(addVec(this.offset, at), () => this.runStatements(block.body, inner), block.name)
     } finally {
@@ -847,6 +931,8 @@ export class Runtime {
 
   private placeEntity(proto: Prototype, args: Arg[], scope: Scope, loc: Loc): Handle {
     const slots = entitySlots(proto, this.registry.profile.supportsQuality)
+    const origins = new Map<string, SlotOrigin>()
+    this.slotOrigins = origins
     const filled = this.fillSlots(
       args,
       slots,
@@ -856,6 +942,7 @@ export class Runtime {
       { name: proto.name, kind: proto.kind },
       'skip',
     )
+    this.slotOrigins = null
 
     const at = filled.has('at') ? this.toVec(filled.get('at')!, 'at', loc) : vec(0, 0)
     const position = addVec(this.offset, at)
@@ -896,6 +983,10 @@ export class Runtime {
       undergroundType: proto.kind === 'underground-belt' ? ((memberOf(filled.get('type')) ?? 'input') as 'input' | 'output') : undefined,
       loc,
     })
+
+    // The trace and its call span were stamped by the scene as this was placed; which argument
+    // filled which slot is known only here.
+    if (entity.trace) entity.trace.slots = Object.fromEntries(origins)
 
     return rectHandle({ x: entity.x, y: entity.y, w: entity.w, h: entity.h }, {
       name: proto.name,
@@ -1337,27 +1428,17 @@ function sameValue(a: Value, b: Value): boolean {
 }
 
 function expandPath(points: Vec[], loc?: Loc): Vec[] {
-  if (points.length <= 1) return points
-  const path: Vec[] = [points[0]]
-  for (let i = 0; i + 1 < points.length; i++) {
-    const a = points[i]
-    const b = points[i + 1]
-    const dir = directionBetween(a, b)
-    if (dir === undefined) {
-      fail(
-        `a belt leg from (${a.x}, ${a.y}) to (${b.x}, ${b.y}) is diagonal`,
-        loc,
-        'belts run horizontally or vertically; add a via corner',
-      )
-    }
-    const step = directionStep(dir)
-    let cursor = a
-    while (cursor.x !== b.x || cursor.y !== b.y) {
-      cursor = vec(cursor.x + step.x, cursor.y + step.y)
-      path.push(cursor)
-    }
-  }
-  return path
+  const path = walkPath(points)
+  if (path) return path
+
+  // `walkPath` refuses a diagonal leg without knowing whose it is; here it has a source line.
+  const at = points.findIndex((a, i) => points[i + 1] && directionBetween(a, points[i + 1]) === undefined)
+  const [a, b] = [points[at], points[at + 1]]
+  return fail(
+    `a belt leg from (${a.x}, ${a.y}) to (${b.x}, ${b.y}) is diagonal`,
+    loc,
+    'belts run horizontally or vertically; add a via corner',
+  )
 }
 
 /**

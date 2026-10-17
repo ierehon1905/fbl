@@ -1,0 +1,395 @@
+{
+ "recipe": "electronic-circuit",
+ "setups": [
+  {
+   "key": "q1",
+   "label": "Q1 · assembler 2"
+  },
+  {
+   "key": "q2",
+   "label": "Q2 · assembler 3"
+  },
+  {
+   "key": "q3a",
+   "label": "Q3 · assembler 3"
+  },
+  {
+   "key": "q3em",
+   "label": "Q3 · EM plant"
+  },
+  {
+   "key": "q3L",
+   "label": "Q3 legendary · EM plant"
+  }
+ ],
+ "targets": [
+  "uncommon",
+  "rare",
+  "epic",
+  "legendary"
+ ],
+ "chance": {
+  "q1": 0.02,
+  "q2": 0.08,
+  "q3a": 0.1,
+  "q3em": 0.125,
+  "q3L": 0.3125
+ },
+ "cost": {
+  "q1": {
+   "uncommon": 25.664429530215596,
+   "rare": 208.27928242420373,
+   "epic": 1682.3585826380172,
+   "legendary": 13541.202026702884
+  },
+  "q2": {
+   "uncommon": 8.012195121961051,
+   "rare": 51.14930679016477,
+   "epic": 316.03766130503294,
+   "legendary": 1922.1087365149854
+  },
+  "q3a": {
+   "uncommon": 6.5102040816363305,
+   "rare": 38.48751891084278,
+   "epic": 217.87000322806983,
+   "legendary": 1211.7222880389234
+  },
+  "q3em": {
+   "uncommon": 2.9768976897718953,
+   "rare": 13.378124177878075,
+   "epic": 57.66073740961317,
+   "legendary": 245.75785091224833
+  },
+  "q3L": {
+   "uncommon": 1.426597582039801,
+   "rare": 4.196813680268743,
+   "epic": 11.129213020367466,
+   "legendary": 29.56777763465782
+  }
+ },
+ "machines": {
+  "q1": {
+   "uncommon": 0.461164709172477,
+   "rare": 3.784210193289521,
+   "epic": 30.608055483953258,
+   "legendary": 246.4036248428407
+  },
+  "q2": {
+   "uncommon": 0.09842056233072118,
+   "rare": 0.6526126219568282,
+   "epic": 4.055692176486309,
+   "legendary": 24.689244184375383
+  },
+  "q3a": {
+   "uncommon": 0.07912414965990051,
+   "rare": 0.4899438193406283,
+   "epic": 2.794510458137546,
+   "legendary": 15.562751617158307
+  },
+  "q3em": {
+   "uncommon": 0.03145856252294002,
+   "rare": 0.15641774185919338,
+   "epic": 0.6884241369344015,
+   "legendary": 2.948201958874565
+  },
+  "q3L": {
+   "uncommon": 0.012833429284219098,
+   "rare": 0.04611449768654786,
+   "epic": 0.1293995730918584,
+   "legendary": 0.35091843963843405
+  }
+ },
+ "loop": {
+  "q1": {
+   "uncommon": {
+    "full": 25.664429530215596,
+    "bare": 37.750000000022915,
+    "none": 51.02040816327578
+   },
+   "rare": {
+    "full": 208.27928242420373,
+    "bare": 356.26562500096645,
+    "none": 510.2040816327583
+   },
+   "epic": {
+    "full": 1682.3585826380172,
+    "bare": 3362.256835964956,
+    "none": 5102.040816327582
+   },
+   "legendary": {
+    "full": 13541.202026702884,
+    "bare": 31731.2988898008,
+    "none": 51020.40816327586
+   }
+  },
+  "q2": {
+   "uncommon": {
+    "full": 8.012195121961051,
+    "bare": 9.625000000007182,
+    "none": 13.586956521746876
+   },
+   "rare": {
+    "full": 51.14930679016477,
+    "bare": 78.01315789492013,
+    "none": 135.8695652174078
+   },
+   "epic": {
+    "full": 316.03766130503294,
+    "bare": 632.3171745261329,
+    "none": 1358.6956521740776
+   },
+   "legendary": {
+    "full": 1922.1087365149854,
+    "bare": 5125.097099163013,
+    "none": 13586.956521740787
+   }
+  },
+  "q3a": {
+   "uncommon": {
+    "full": 6.5102040816363305,
+    "bare": 7.750000000003806,
+    "none": 11.111111111114015
+   },
+   "rare": {
+    "full": 38.48751891084278,
+    "bare": 60.06250000046416,
+    "none": 111.11111111111705
+   },
+   "epic": {
+    "full": 217.87000322806983,
+    "bare": 465.4843750297028,
+    "none": 1111.1111111111709
+   },
+   "legendary": {
+    "full": 1211.7222880389234,
+    "bare": 3607.503907577765,
+    "none": 11111.111111111706
+   }
+  },
+  "q3em": {
+   "uncommon": {
+    "full": 2.9768976897718953,
+    "bare": 3.583333333336186,
+    "none": 6.095238095240911
+   },
+   "rare": {
+    "full": 13.378124177878075,
+    "bare": 22.011904762028596,
+    "none": 60.95238095238342
+   },
+   "epic": {
+    "full": 57.66073740961317,
+    "bare": 135.21598639750604,
+    "none": 609.5238095238344
+   },
+   "legendary": {
+    "full": 245.75785091224833,
+    "bare": 830.6124879927146,
+    "none": 6095.238095238173
+   }
+  },
+  "q3L": {
+   "uncommon": {
+    "full": 1.426597582039801,
+    "bare": 1.5833333333340207,
+    "none": 3.1030303030321513
+   },
+   "rare": {
+    "full": 4.196813680268743,
+    "bare": 6.539855072471288,
+    "none": 31.030303030303717
+   },
+   "epic": {
+    "full": 11.129213020367466,
+    "bare": 27.01244486469424,
+    "none": 310.3030303030317
+   },
+   "legendary": {
+    "full": 29.56777763465782,
+    "bare": 111.5731418344529,
+    "none": 3103.030303030307
+   }
+  }
+ },
+ "farm": {
+  "q3em": {
+   "label": "Q3 · EM plant",
+   "ingredients": {
+    "iron-plate": 14745.4710547349,
+    "copper-cable": 44236.4131642047
+   },
+   "crafters": 130.93752048647818,
+   "recyclers": 45.95459704599572
+  },
+  "q3L": {
+   "label": "Q3 legendary · EM plant",
+   "ingredients": {
+    "iron-plate": 1774.066658079469,
+    "copper-cable": 5322.199974238408
+   },
+   "crafters": 15.636148071812448,
+   "recyclers": 5.418958306493602
+  }
+ },
+ "chainSteps": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6
+ ],
+ "chain": [
+  {
+   "label": "Q1 ×2",
+   "chance": 0.02,
+   "legendary": [
+    0.00001999999999999997,
+    0.00005039999999999994,
+    0.00009271999999999988,
+    0.00014849279999999983,
+    0.00021925899199999976,
+    0.0003065622716159997
+   ]
+  },
+  {
+   "label": "Q3 ×4",
+   "chance": 0.1,
+   "legendary": [
+    0.00009999999999999994,
+    0.00045999999999999963,
+    0.0012699999999999992,
+    0.0027279999999999987,
+    0.005024349999999998,
+    0.008331093999999997
+   ]
+  },
+  {
+   "label": "Q3 ×5",
+   "chance": 0.125,
+   "legendary": [
+    0.0001249999999999999,
+    0.0006562499999999996,
+    0.001964843749999999,
+    0.004441406249999998,
+    0.008448333740234373,
+    0.014291084289550778
+   ]
+  },
+  {
+   "label": "Q3 legendary ×4",
+   "chance": 0.25,
+   "legendary": [
+    0.0002499999999999998,
+    0.002124999999999999,
+    0.008593749999999997,
+    0.022937499999999996,
+    0.04722167968749999,
+    0.08198681640625
+   ]
+  },
+  {
+   "label": "Q3 legendary ×5",
+   "chance": 0.3125,
+   "legendary": [
+    0.00031249999999999984,
+    0.0031640624999999993,
+    0.014353027343749998,
+    0.040440673828124996,
+    0.08408715724945068,
+    0.1440384703874588
+   ]
+  }
+ ],
+ "speed": [
+  1.25,
+  1.625,
+  2,
+  2.375,
+  3.125
+ ],
+ "perMaterial": {
+  "q1": [
+   1,
+   0.05065376569034844,
+   0.007681993049799692,
+   0.001129366842246384,
+   0.0001846217193326019
+  ],
+  "q3L": [
+   1,
+   0.9112590799019952,
+   0.3812416089669113,
+   0.1707218647466652,
+   0.08455150166814125
+  ]
+ },
+ "unlocks": [
+  [
+   "Quality module 1",
+   [
+    "automation-science-pack",
+    "logistic-science-pack"
+   ]
+  ],
+  [
+   "Quality module 2",
+   [
+    "automation-science-pack",
+    "logistic-science-pack",
+    "chemical-science-pack",
+    "space-science-pack"
+   ]
+  ],
+  [
+   "Quality module 3",
+   [
+    "automation-science-pack",
+    "logistic-science-pack",
+    "chemical-science-pack",
+    "space-science-pack",
+    "electromagnetic-science-pack"
+   ]
+  ],
+  [
+   "Epic tier",
+   [
+    "automation-science-pack",
+    "logistic-science-pack",
+    "chemical-science-pack",
+    "utility-science-pack",
+    "space-science-pack",
+    "agricultural-science-pack"
+   ]
+  ],
+  [
+   "Legendary tier",
+   [
+    "automation-science-pack",
+    "logistic-science-pack",
+    "chemical-science-pack",
+    "production-science-pack",
+    "utility-science-pack",
+    "space-science-pack",
+    "metallurgic-science-pack",
+    "agricultural-science-pack",
+    "electromagnetic-science-pack",
+    "cryogenic-science-pack"
+   ]
+  ]
+ ],
+ "packs": [
+  "automation-science-pack",
+  "logistic-science-pack",
+  "military-science-pack",
+  "chemical-science-pack",
+  "production-science-pack",
+  "utility-science-pack",
+  "space-science-pack",
+  "metallurgic-science-pack",
+  "agricultural-science-pack",
+  "electromagnetic-science-pack",
+  "cryogenic-science-pack",
+  "promethium-science-pack"
+ ]
+}

@@ -51,7 +51,7 @@ export interface LoadedAtlas {
 let cached: Promise<LoadedAtlas | null> | undefined
 
 /**
- * Returns null when the atlas is not there — the renderer falls back to its schematic view,
+ * Returns null when the atlas is not there — the renderer falls back to plain footprints,
  * so the studio still works on a machine without Factorio installed.
  *
  * The atlas is 12MB, which is worth a progress bar rather than a spinner, so the PNG is

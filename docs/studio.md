@@ -5,17 +5,91 @@ what the preview draws, and the panels that read numbers off the scene.
 
 ## Preview
 
-Two views, toggled in the toolbar:
+The game's own art, drawn in the game's render order — belts and pipes on the ground, machines
+above them, inserters and poles over everything — positioned by each sprite's own `shift` so
+overhang lands where it does in game. Belts pick their orientation from their neighbours, so
+corners get the curve sprite and undergrounds get the entry and exit structures. Machines carry
+a floating recipe icon, and a badge along the bottom edge for the modules inside them: one icon
+per module in slot order, each with its quality mark, because the sprite itself cannot show what
+is in the slots.
 
-- **sprites** — the game's own art, drawn in the game's render order (belts and pipes on the
-  ground, machines above them, inserters and poles over everything), positioned by each
-  sprite's own `shift` so overhang lands where it does in game. Belts pick their orientation
-  from their neighbours, so corners get the curve sprite and undergrounds get the entry and
-  exit structures. Machines carry a floating recipe icon, and a badge along the bottom edge
-  for the modules inside them — one icon per module in slot order, each with its quality
-  mark, because the sprite itself cannot show what is in the slots.
-- **schematic** — flat colour-coded footprints with direction chevrons. Easier to read layout
-  and alignment from, and the only view available without a local Factorio install.
+There is no second view to switch to. There used to be a schematic one — flat footprints and
+direction chevrons — and it was removed: the point of this preview is to look like the game, and
+a toggle offering to make it look less like the game is a choice nobody needed to be given.
+
+What survives of it is a **fallback**, not a view. An entity the atlas has no picture of is
+drawn as a colour-coded footprint rather than left invisible, and so is everything if there is
+no atlas at all — which the console says out loud when it happens, because a studio that quietly
+looks like a diagram is a studio that looks broken.
+
+## Which line built this
+
+A generated blueprint cannot answer the question the eye keeps asking. Twenty-four assemblers
+are one statement read twenty-four times; nothing about the picture says which reading you are
+looking at, or where to go and change it.
+
+So every entity is stamped, as it is placed, with the path it came by — the blocks that were
+called, the turn of the loop it was on, and the frame it landed in. That buys two things, and
+the second one is the one people keep:
+
+- **Click an entity** and the editor jumps to the statement that placed it. Its tooltip gains a
+  last line — *line 19 · 3rd of 4* — and a breadcrumb appears along the top of the canvas with
+  the whole chain: `feed () › for i · 3 of 4 › :19 assembling-machine-3`. Every crumb jumps to
+  its own line, so a block call is one click away from the loop inside it.
+- **Put the caret in a line** and everything that line built lights up. All twenty-four at once,
+  washed rather than ringed, because two dozen rings is a fence. This is the direction that
+  turns "what does this statement actually do" from a guess into a look.
+
+Both work in the ordinary view — they change nothing and need no mode.
+
+## Builder mode
+
+Everything that writes to the source lives behind **build** in the toolbar, or **B**. Without
+it the page is what it always was: the left button pans, nothing is editable, and looking at
+where an entity came from still works, because looking changes nothing.
+
+With it, a selected entity opens a panel — its recipe, what it was built to, and which way it
+faces. **R** rotates it and Shift+R goes back, as in the game. Every change is written into the
+source at the exact spot the value stands, and lands on Monaco's undo stack as one step, so
+Ctrl+Z takes back one action whether the keyboard belongs to the map or to the text.
+
+What can be changed is decided by the source rather than by the panel, and the panel says which
+case it is before anything is clicked:
+
+- a value written as a literal is replaced where it stands;
+- a slot the call never mentioned is added, before the bracket that closes it;
+- a value handed in under a name — `recipe r` inside a block — is refused, pointing at the call
+  that can actually change it;
+- an entity from a loop or a block called more than once carries a warning that one statement
+  made all of them, so a change here changes all of them.
+
+It follows the game's hands rather than a menu's. **R** turns whatever is under the pointer with
+nothing clicked, and **Q** is the pipette: with an empty hand it takes what you are pointing at,
+with a full one it puts it down. **E** opens the build menu. While something is held, its own
+sprite stands see-through on the tile under the pointer, outlined amber where it fits and red
+where it does not, and a click on red is refused rather than written and complained about
+afterwards.
+
+**Right click mines**: the statement behind the entity comes out of the source, and its line
+with it. What decides whether that is allowed is how many times the statement was *run* rather
+than how many entities it left — one belt of thirteen tiles is one run and goes whole, while one
+machine out of a loop of three is refused, because taking a single reading out of a generator
+means writing a condition into it.
+
+**1** puts a belt in the cursor, and then dragging on the map lays a run: along the axis the
+drag moved furthest in first, then the other, which is one corner and no diagonals. The ghost
+under the pointer is expanded by the same call the compiler places from, and marks in red the
+tiles that already hold something — that is where `auto` will tunnel under. On release it
+writes one statement at the end of the file, `belt (from (3, 2), via ((6, 2)), to (6, 4), auto)`,
+in the coordinates you were pointing at.
+
+**Esc** empties the cursor, then drops the selection, then leaves the mode — one layer a press.
+**Ctrl+C** with something selected puts the call that placed it on the clipboard: the one thing
+worth copying out of a generated blueprint is the line that generated it, and that works in
+either mode.
+
+Placing and deleting are not in yet; the design for them is [map-editing.md](map-editing.md),
+which also has the keys that are still owed.
 
 ## The editor
 
@@ -39,9 +113,12 @@ which is the fastest way to get a number out of the picture and into the source.
 
 ## Power overlay
 
-**power** in the toolbar (or <kbd>P</kbd>) washes everything the poles reach in blue, outlines
-the edge of the region, and rings anything that draws power and sits outside it. When there is
-at least one pole, the console also totals what is left dark.
+**power** in the toolbar (or <kbd>P</kbd>) washes everything the poles reach in blue and outlines
+the edge of the region. Anything that draws power and sits outside it gets a lightning badge in
+its corner, the way the game marks one — not a ring around its footprint, because the accent
+colour means "what you are pointing at or have picked" everywhere else on this canvas, and an
+outline in it around every dark machine read as a selection of all of them. When there is at
+least one pole, the console also totals what is left dark.
 
 The number that matters is the **supply area**, which is not the wire reach usually quoted:
 

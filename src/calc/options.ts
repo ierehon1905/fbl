@@ -1,7 +1,7 @@
 import type { LabRecipe } from '../data/dataset'
 import type { ProtoRegistry, RecipeGraph } from '../core'
 import { machinesRunning } from '../core'
-import type { PickerOption } from './picker'
+import type { PickerOption } from '../ui/picker'
 import { labelOf } from './view'
 
 /**

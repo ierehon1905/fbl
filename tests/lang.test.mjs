@@ -4,7 +4,20 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { ProtoRegistry, compile, decodeBlueprint, exportBlueprint, parse } from '../dist-node/core.mjs'
+import {
+  ProtoRegistry,
+  applyEdit,
+  callText,
+  compile,
+  decodeBlueprint,
+  exportBlueprint,
+  parse,
+  planRemove,
+  planSlotEdit,
+  refused,
+  sharedWith,
+  walkPath,
+} from '../dist-node/core.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -2055,6 +2068,139 @@ test('a loop can count its own passes', () => {
   }`)
   assert.deepEqual(laid.output, ['0 10', '1 20', '2 30'])
   assert.deepEqual(laid.scene.entities.map((e) => e.x), [0, 1, 2])
+})
+
+test('every entity remembers the path it was placed by', () => {
+  const laid = run(`defblock cell (int n) => {
+  row for i in 0..n => { steel-chest () }
+}
+
+cell (n 3)
+cell (at (0, 5), n 2)
+steel-chest (at (0, 9))`)
+
+  const path = (entity) =>
+    (entity.trace?.steps ?? [])
+      .map((step) => (step.kind === 'loop' ? `${step.name}=${step.at}/${step.of}` : `${step.name}()@${step.loc.line}`))
+      .join(' ')
+
+  const all = laid.scene.entities
+  assert.equal(all.length, 6)
+
+  // Two calls of one block, told apart by where each was called from — which is the whole
+  // point: nothing else about the two rows differs.
+  assert.deepEqual(all.slice(0, 3).map(path), ['cell()@5 i=0/3', 'cell()@5 i=1/3', 'cell()@5 i=2/3'])
+  assert.deepEqual(all.slice(3, 5).map(path), ['cell()@6 i=0/2', 'cell()@6 i=1/2'])
+
+  // A statement at the top of the file came by no path at all, and says so.
+  assert.deepEqual(all[5].trace.steps, [])
+
+  // The frame is stamped too: the second call was placed five tiles down, and a tile on
+  // screen has to be read back through that to mean anything in the source.
+  assert.deepEqual(all[0].trace.origin, { x: 0, y: 0 })
+  assert.deepEqual(all[3].trace.origin, { x: 0, y: 5 })
+
+  // And every one of them knows the line it was written on.
+  assert.deepEqual([...new Set(all.map((e) => e.loc.line))], [2, 7])
+})
+
+test('a belt drawn on the map covers the tiles the compiler places on', () => {
+  // The studio draws its ghost from `walkPath` and the compiler places from the same call, so
+  // this is the promise that a preview is a promise: one corner, six tiles, no diagonals.
+  const corners = [{ x: 3, y: 2 }, { x: 6, y: 2 }, { x: 6, y: 4 }]
+  const tiles = walkPath(corners)
+  assert.deepEqual(tiles, [
+    { x: 3, y: 2 }, { x: 4, y: 2 }, { x: 5, y: 2 },
+    { x: 6, y: 2 }, { x: 6, y: 3 }, { x: 6, y: 4 },
+  ])
+
+  const scene = run('belt (from (3, 2), via ((6, 2)), to (6, 4))').scene
+  assert.deepEqual(scene.entities.map((e) => ({ x: e.x, y: e.y })), tiles)
+
+  // A diagonal leg is not a belt, and comes back as nothing rather than as a guess.
+  assert.equal(walkPath([{ x: 0, y: 0 }, { x: 2, y: 3 }]), undefined)
+})
+
+test('what is written can be changed by pointing at it; what is worked out cannot', () => {
+  const source = `defblock pair (recipe r) => {
+  row for i in 0..2 => { assembling-machine-3 (recipe r, dir south) }
+}
+
+assembling-machine-3 (at (0, 0), recipe iron-gear-wheel, dir north)
+steel-chest ()
+pair (at (0, 5), r electronic-circuit)`
+
+  const scene = run(source).scene
+  const [inner, other, plain, chest] = [scene.entities[2], scene.entities[3], scene.entities[0], scene.entities[1]]
+
+  // A literal standing in the call is replaced where it stands.
+  const replace = planSlotEdit(plain, 'recipe', 'iron-plate')
+  assert.equal(refused(replace), false)
+  assert.equal(replace.kind, 'replace')
+  assert.match(applyEdit(source, replace).split('\n')[4], /recipe iron-plate, dir north/)
+
+  // A slot the call never mentioned is added, before the bracket that closes it.
+  const insert = planSlotEdit(plain, 'quality', 'legendary')
+  assert.equal(insert.kind, 'insert')
+  assert.match(applyEdit(source, insert).split('\n')[4], /dir north, quality legendary\)$/)
+
+  // …and into empty brackets without a comma nobody wrote.
+  assert.match(applyEdit(source, planSlotEdit(chest, 'quality', 'rare')).split('\n')[5], /^steel-chest \(quality rare\)$/)
+
+  // A value handed in by name is not a literal, however much it looks like one: replacing the
+  // text would rename the parameter and change every entity the block makes.
+  const handed = planSlotEdit(inner, 'recipe', 'iron-plate')
+  assert.equal(refused(handed), true)
+  assert.match(handed.reason, /'r'/)
+
+  // A position is a tuple, so there is no one token to put another in the place of.
+  assert.equal(refused(planSlotEdit(plain, 'at', '(9, 9)')), true)
+
+  // The call as written, brackets and all — what Ctrl+C on the map puts on the clipboard.
+  assert.equal(callText(source, plain.trace.call), 'assembling-machine-3 (at (0, 0), recipe iron-gear-wheel, dir north)')
+  assert.equal(callText(source, chest.trace.call), 'steel-chest ()')
+
+  // And the count of what a change would take with it, which is what the reader is warned by.
+  // Runs, not entities: a loop read twice is two, and a belt of many tiles laid once is one.
+  assert.equal(sharedWith(scene.entities, plain), 1)
+  assert.equal(sharedWith(scene.entities, inner), 2)
+  assert.equal(sharedWith(scene.entities, other), 2)
+
+  const laid = run('belt (from (0, 0), to (12, 0))').scene.entities
+  assert.equal(laid.length, 13)
+  assert.equal(sharedWith(laid, laid[6]), 1, 'thirteen tiles, one belt, one thing to remove')
+})
+
+test('an entity can be taken off the map when its statement made only it', () => {
+  const source = `defblock pair (recipe r) => {
+  row for i in 0..2 => { assembling-machine-3 (recipe r, dir south) }
+}
+
+assembling-machine-3 (at (0, 0), recipe iron-gear-wheel)
+belt (from (0, 6), to (4, 6))
+pair (at (0, 9), r electronic-circuit)`
+
+  const entities = run(source).scene.entities
+  const of = (name, line) => entities.find((e) => e.proto.name === name && e.loc.line === line)
+
+  // A statement alone on its line goes, and takes the line with it.
+  const plan = planRemove(of('assembling-machine-3', 5), sharedWith(entities, of('assembling-machine-3', 5)))
+  assert.equal(refused(plan), false)
+  const without = applyEdit(source, plan)
+  assert.equal(without.includes('iron-gear-wheel'), false)
+  assert.equal(without.split('\n').length, source.split('\n').length - 1)
+
+  // A belt is one statement however many tiles it laid, so it goes whole.
+  const belt = of('express-transport-belt', 6) ?? entities.find((e) => e.loc.line === 6)
+  const gone = applyEdit(source, planRemove(belt, sharedWith(entities, belt)))
+  assert.equal(gone.includes('belt (from'), false)
+
+  // One out of a loop is the same argument as editing one out of a loop: there is no way to
+  // say it, so it is refused rather than written around.
+  const inLoop = entities.find((e) => e.loc.line === 2)
+  const refusal = planRemove(inLoop, sharedWith(entities, inLoop))
+  assert.equal(refused(refusal), true)
+  assert.match(refusal.reason, /made 2 of these/)
 })
 
 test('after a label, brackets make a list — and say so when they were meant to group', () => {

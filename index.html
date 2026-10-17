@@ -22,12 +22,11 @@
         <span class="spacer"></span>
 
         <span id="stats" class="stats"></span>
-        <div class="segmented" id="view">
-          <button type="button" data-mode="sprites" class="active">sprites</button>
-          <button type="button" data-mode="schematic">schematic</button>
-        </div>
+        <span id="art" class="art" title="the game art these sprites came from"></span>
         <a class="ghost" href="./calc.html" title="Work out what a factory has to run at">calculator</a>
         <button id="power" type="button" class="ghost" title="Show what the poles reach (P)">power</button>
+        <button id="build" type="button" class="ghost" aria-pressed="false"
+                title="Edit entities on the map, writing back to the source (B)">build</button>
         <button id="fit" type="button" class="ghost" title="Fit to view (F)">fit</button>
         <button id="copy" type="button" class="primary">copy blueprint</button>
       </header>
@@ -50,6 +49,8 @@
             </div>
             <div id="loading" class="loading">loading game data…</div>
             <div id="preload" class="preload" hidden></div>
+            <nav id="trail" class="trail" hidden></nav>
+            <aside id="entity" class="entity-panel" hidden></aside>
           </div>
 
           <div class="tab-body" id="tab-docs" hidden><article id="docs" class="docs"></article></div>

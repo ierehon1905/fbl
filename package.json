@@ -14,7 +14,8 @@
     "build:core": "node scripts/build-core.mjs",
     "extract-sprites": "node scripts/build-core.mjs && node scripts/extract-sprites.mjs",
     "extract-balancers": "node scripts/build-core.mjs && node scripts/extract-balancers.mjs",
-    "audit": "node scripts/build-core.mjs && node scripts/audit-recipes.mjs 2x1 spa 2.0 1.1"
+    "audit": "node scripts/build-core.mjs && node scripts/audit-recipes.mjs 2x1 spa 2.0 1.1",
+    "charts": "node scripts/build-core.mjs && node scripts/quality-charts.mjs && node scripts/quality-race.mjs && python3 scripts/quality-charts.py"
   },
   "dependencies": {
     "monaco-editor": "^0.56.0",

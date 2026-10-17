@@ -15,7 +15,7 @@ import { loadDataset } from '../data/loader'
 import { fetchBytes, type OnProgress } from '../data/progress'
 import { loadAtlas } from '../data/sprites'
 import { DEFAULT_VERSION, VERSIONS } from '../data/versions'
-import { BlueprintCanvas, type ViewMode } from './canvas'
+import { BlueprintCanvas } from './canvas'
 import { parseCostView, renderCost, type CostSection, type CostView } from './cost-panel'
 import { type IconSheet, type PanelDeps, type PanelView } from './panel'
 import { parseRateView, renderRates, type RateSection, type RateView } from './rate-panel'
@@ -23,12 +23,13 @@ import { renderDocs } from './docs'
 import { createEditor, type Editor } from './editor'
 import { Drawer } from './drawer'
 import { EXAMPLES } from './examples'
+import { Builder } from './builder'
 import { Preloader } from './preloader'
+import { crumbs, madeOnLine } from './provenance'
 
 const STORAGE_SOURCE = 'fbl.source'
 const STORAGE_VERSION = 'fbl.version'
 const STORAGE_NAME = 'fbl.schema'
-const STORAGE_MODE = 'fbl.mode'
 
 const el = <T extends HTMLElement>(id: string): T => {
   const found = document.getElementById(id)
@@ -55,7 +56,10 @@ const dom = {
   fit: el<HTMLButtonElement>('fit'),
   power: el<HTMLButtonElement>('power'),
   stats: el('stats'),
-  view: el('view'),
+  art: el('art'),
+  trail: el('trail'),
+  build: el('build'),
+  entity: el('entity'),
   splitter: el('splitter'),
   panes: document.querySelector<HTMLElement>('.panes')!,
 }
@@ -68,6 +72,10 @@ const host: { registry: ProtoRegistry | null; blocks: BlockSignature[] } = { reg
 
 let source = readStorage(STORAGE_SOURCE) ?? EXAMPLES[0].source
 let blueprintText = ''
+/** The last scene drawn, so the caret and the breadcrumb can be answered without rebuilding. */
+let placed: PlacedEntity[] = []
+/** The line the caret is on, and whose entities are lit. */
+let litLine: number | null = null
 let costView: CostView = parseCostView(readStorage('fbl.cost'))
 let rateView: RateView = parseRateView(readStorage('fbl.rates'))
 let showPower = readStorage('fbl.power') === 'on'
@@ -175,7 +183,13 @@ function build(): void {
   for (const diagnostic of all) log(diagnostic.severity, diagnostic.message, diagnostic.loc, diagnostic.hint)
   editor.setDiagnostics(all)
 
+  placed = scene.entities
   preview.setScene(scene.entities, clashing)
+  drawTrail(preview.selection)
+  builder.show(preview.selection)
+  // The caret has not moved, but what its line makes may have; light it again from the new scene.
+  litLine = ran ? litLine : null
+  if (litLine !== null) preview.setLit(madeOnLine(placed, litLine))
   dom.copy.disabled = blueprintText === ''
 
   const errors = all.filter((d) => d.severity === 'error').length
@@ -185,6 +199,41 @@ function build(): void {
     : scene.entities.length
       ? `${scene.entities.length} entities · ${warnings} warning${warnings === 1 ? '' : 's'}`
       : ''
+}
+
+/**
+ * The chain a selected entity came by, along the bottom of the canvas. Every crumb jumps to
+ * its own line, which is the whole point: a generated blueprint has no other way of telling
+ * you which of twenty-four you clicked on.
+ */
+function drawTrail(entity: PlacedEntity | null): void {
+  dom.trail.replaceChildren()
+  dom.trail.hidden = entity === null
+  if (!entity) return
+
+  const path = crumbs(entity)
+  for (const [at, crumb] of path.entries()) {
+    if (at > 0) {
+      const sep = document.createElement('span')
+      sep.className = 'sep'
+      sep.textContent = '›'
+      dom.trail.append(sep)
+    }
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = crumb.label
+    button.title = `go to line ${crumb.line}`
+    button.addEventListener('click', () => editor.reveal(crumb.line, crumb.column))
+    dom.trail.append(button)
+  }
+
+  const close = document.createElement('button')
+  close.type = 'button'
+  close.className = 'trail-x'
+  close.textContent = '×'
+  close.title = 'clear the selection'
+  close.addEventListener('click', () => preview.select(null))
+  dom.trail.append(close)
 }
 
 function panelDeps(): PanelDeps | null {
@@ -310,6 +359,49 @@ editor.onChange((next) => {
   debounce = window.setTimeout(build, 200)
 })
 
+// ── The picture and the source, pointing at each other ──────────────────────
+// Clicking an entity says where it was written; putting the caret in a line says what that
+// line built. The second direction is the one that surprises people: a statement inside a
+// loop lights up two dozen machines at once, which is the fact a generated blueprint is
+// otherwise unable to tell you.
+const builder = new Builder(dom.entity, dom.build, {
+  registry: () => host.registry,
+  sheet: () => iconSheet,
+  source: () => source,
+  entities: () => placed,
+  patch: (start, end, text, label) => editor.patch(start, end, text, label),
+  complain: (message) => log('warning', message),
+  undo: () => editor.undo(),
+  deselect: () => preview.select(null),
+  note: (message) => log('out', message),
+  hold: (tool) => preview.setTool(tool),
+  // At the end of the file, on a line of its own, and through the editor so it is one undo.
+  append: (statement) => {
+    const lines = source.split('\n')
+    const last = lines.length
+    const column = lines[last - 1].length + 1
+    const lead = lines[last - 1].trim() === '' ? '' : '\n'
+    editor.patch({ line: last, col: column }, { line: last, col: column }, `${lead}${statement}\n`, 'draw')
+  },
+})
+
+preview.onDraw((run) => builder.onDrawn(run))
+preview.onPlace((at, room) => builder.placed(at, room))
+preview.onHover((entity) => builder.hover(entity))
+preview.onMine((entity) => builder.mined(entity))
+
+preview.onSelectionChange((entity) => {
+  drawTrail(entity)
+  builder.show(entity)
+  // Shown, not handed over: the keyboard belongs to the map while something on it is selected.
+  if (entity?.loc) editor.reveal(entity.loc.line, entity.loc.col, false)
+})
+
+editor.onCaretLine((line) => {
+  litLine = line
+  preview.setLit(madeOnLine(placed, line))
+})
+
 dom.version.addEventListener('change', () => void selectVersion(dom.version.value))
 
 /** The name the buffer was last saved or opened under, so the drawer opens on it again. */
@@ -372,41 +464,19 @@ dom.tabs.addEventListener('click', (event) => {
   if (tab === 'blueprint') preview.requestRender()
 })
 
-// ── View mode ─────────────────────────────────────────────────────────────────
-
-/**
- * `remember` is false when the studio falls back on its own — a visitor who arrives before
- * the atlas exists should not be left preferring the schematic view forever.
- */
-function setMode(mode: ViewMode, remember = true): void {
-  preview.setMode(mode)
-  if (remember) writeStorage(STORAGE_MODE, mode)
-  for (const button of dom.view.querySelectorAll('button')) {
-    button.classList.toggle('active', button.dataset.mode === mode)
-  }
-}
-
-dom.view.addEventListener('click', (event) => {
-  const button = (event.target as HTMLElement).closest('button')
-  if (button?.dataset.mode) setMode(button.dataset.mode as ViewMode)
-})
+// ── The game's art ────────────────────────────────────────────────────────────
 
 void loadAtlas(preloader.track('sprites', 'entity sprites')).then((atlas) => {
   preloader.finish('sprites')
   preview.setAtlas(atlas)
+
+  // Without a local install there is no art, and the canvas falls back to footprints on its
+  // own. Saying so once beats leaving someone to wonder why the game looks like a diagram.
   if (!atlas) {
-    // Without a local Factorio install there is no art to show; schematic is the only view.
-    for (const button of dom.view.querySelectorAll('button')) {
-      if (button.dataset.mode === 'sprites') {
-        button.disabled = true
-        button.title = 'run `npm run extract-sprites` with Factorio installed'
-      }
-    }
-    setMode('schematic', false)
+    log('warning', 'no entity sprites — run `npm run extract-sprites` with Factorio installed')
     return
   }
-  dom.view.title = `game art from Factorio ${atlas.manifest.gameVersion}`
-  setMode((readStorage(STORAGE_MODE) as ViewMode) ?? 'sprites')
+  dom.art.textContent = `Factorio ${atlas.manifest.gameVersion}`
 })
 
 window.addEventListener('keydown', (event) => {

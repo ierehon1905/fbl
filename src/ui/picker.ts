@@ -1,5 +1,7 @@
+import './picker.css'
+
 import type { LabIcon } from '../data/dataset'
-import { iconStyle, type IconSheet } from '../ui/icons'
+import { iconStyle, type IconSheet } from './icons'
 
 /**
  * Choosing a thing by looking at it.

@@ -12,7 +12,16 @@ export {
 export { check, Checker, type BlockSignature } from './check'
 export { computeCost, type Cost, type CostEntry } from './cost'
 export { LangError, type Diagnostic, type Loc } from './errors'
-export { Direction, directionName, type Rect, type Vec } from './geometry'
+export {
+  Direction,
+  directionFromName,
+  directionName,
+  directionStep,
+  rotateSize,
+  walkPath,
+  type Rect,
+  type Vec,
+} from './geometry'
 export { labelSpans, type LabelSpan } from './labels'
 export { MODULE_NAMES, MODULES, moduleOffering } from './modules'
 export { parse } from './parser'
@@ -65,7 +74,17 @@ export {
 } from './calc/solve'
 export { ProtoRegistry, type Prototype } from './proto'
 export { Runtime, type RunResult } from './run'
-export { Scene, type PlacedEntity } from './scene'
+export { Scene, type PlacedEntity, type SlotOrigin, type Span, type Trace, type TraceStep } from './scene'
+export {
+  applyEdit,
+  callText,
+  planRemove,
+  planSlotEdit,
+  refused,
+  sharedWith,
+  type Refusal,
+  type SlotEdit,
+} from './edit'
 export {
   beltOrientation,
   isBeltish,

@@ -13,8 +13,8 @@ npm run extract-sprites                                          # → public/sp
 
 The extractor finds a Steam or /Applications install by itself; override with `--data` and
 `--dump`, or `FACTORIO_DATA` / `FACTORIO_DUMP`. `--ppt 32` quarters the atlas at the cost of
-sharpness when zoomed in. Without an atlas the studio still runs — the **sprites / schematic**
-toggle just stays on schematic.
+sharpness when zoomed in. Without an atlas the studio still runs: every entity is drawn
+as a colour-coded footprint instead of its art, and the console says why.
 
 Hold **Alt** over the preview and the tile under the cursor lights up with its coordinate, ready
 to type into the source — negative numbers and all. The hover tooltip stands aside while it is
@@ -38,7 +38,7 @@ what fixed the black hole where an electromagnetic plant should have been.
 - **The sprite atlas is a still frame.** One frame per entity, no animation, no working-state
   overlays, and no inserter arms — inserters show their platform, which is what carries their
   facing. 85 of 86 entities resolve; `heat-pipe` names its connection sprites differently and
-  falls back to schematic.
+  falls back to a plain footprint.
 - **Belt orientation is derived, not stored.** A belt tile knows only which way it faces; the
   curve art comes from its neighbours. Factorio names those sprites by the side items arrive
   *through*, not by the direction they were travelling — a belt running east enters the corner
@@ -85,7 +85,7 @@ what fixed the black hole where an electromagnetic plant should have been.
   `undergroundType` is `input`/`output` in the blueprint but `in-`/`out-` in the atlas, and the
   mismatched key quietly resolved to whatever variant sorted first — every underground drawn
   facing north while its tooltip read *facing east*. All variant naming now lives in
-  `src/core/topology.ts`, a miss draws the schematic fallback instead of a wrong orientation,
+  `src/core/topology.ts`, a miss draws the footprint fallback instead of a wrong orientation,
   and a test walks every entity in every example to check the name exists.
 - Nothing has been pasted into the game and verified tile-for-tile. That is the next test
   worth writing: export a known blueprint from Factorio, decode it, and diff.

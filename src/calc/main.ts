@@ -25,7 +25,7 @@ import { qualityRailHtml } from './quality-rail'
 import { railHtml, type RailContext } from './rail'
 import { labelOf as labelOfItem } from './view'
 import { beltOptions, itemOptions, machineOptions, moduleOptions, qualityOptions, recipeOptions } from './options'
-import { openPicker, type PickerOption } from './picker'
+import { openPicker, type PickerOption } from '../ui/picker'
 import { emptyState, readLink, readState, rungOf, setNode, setRung, settingsOf, writeLink, writeState, type CalcState } from './state'
 import { diagramOf, type Carrier } from './view'
 
