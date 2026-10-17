@@ -26,12 +26,24 @@ An entity's `position` is the centre of its footprint, not a corner — a 3×3 a
 tiles (0, 0)–(2, 2) has position (1.5, 1.5) — and the exporter converts from the internal
 top-left-plus-size form on the way out.
 
+A recipe is written under the game's name, which is not always the dataset's: the dataset
+calls the ore-melting recipes `iron-ore-melting` and `copper-ore-melting` because the game
+names them after the fluid they make (`molten-iron`, `molten-copper`). The game drops any
+machine whose recipe it does not know, so the exporter maps them back (`GAME_RECIPE_NAMES`).
+The thumbnail icons are recipe signals on 2.0 and later.
+
 ## Directions
 
 Internally every direction is on the 16-point scale that 2.0 introduced: north 0, east 4,
 south 8, west 12. The exporter halves them for 1.1, which is the only thing `directionScale`
 in the version profile is for. A direction is omitted entirely for entities the game does not
 rotate, because writing one makes the game refuse the blueprint.
+
+Inserters are the one place a program and the game disagree on what a direction means. A
+program says where an inserter **drops** — `south`, or `from north` — because that is what you
+think about when you lay one down. The game points an inserter at where it **picks up**. The
+exporter and the sprite picker both turn an inserter round on the way out (`gameDirection` in
+`src/core/geometry.ts`); everything inside the language keeps the drop direction.
 
 ## Modules and quality
 
