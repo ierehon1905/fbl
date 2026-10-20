@@ -26,6 +26,47 @@ interface BlueprintEntity {
   filter?: unknown
   input_priority?: string
   output_priority?: string
+  /** 1.1 keeps a pole's copper wires on the pole itself, as the entity numbers it reaches. */
+  neighbours?: number[]
+}
+
+/** The connector a pole's copper wire hangs on, in 2.0's `wires` array. */
+const POLE_COPPER = 5
+
+/**
+ * Copper wires between the blueprint's poles: a minimum spanning tree over every pair close
+ * enough to reach each other, so each group of poles in range is joined with the fewest and
+ * shortest wires. A blueprint that carries no wires leaves the joining to the game, which
+ * links a pasted pole to only some of its neighbours — whole rows of a build came out cut off.
+ */
+function poleWires(scene: Scene): Array<[number, number]> {
+  const poles = scene.entities
+    .map((entity, index) => ({ entity, number: index + 1 }))
+    .filter(({ entity }) => entity.proto.wireReach !== undefined)
+  const centre = (e: PlacedEntity) => ({ x: e.x + e.w / 2, y: e.y + e.h / 2 })
+
+  const edges: Array<{ a: number; b: number; length: number }> = []
+  for (let i = 0; i < poles.length; i++) {
+    for (let j = i + 1; j < poles.length; j++) {
+      const p = centre(poles[i].entity)
+      const q = centre(poles[j].entity)
+      const length = Math.hypot(p.x - q.x, p.y - q.y)
+      const reach = Math.min(poles[i].entity.proto.wireReach!, poles[j].entity.proto.wireReach!)
+      if (length <= reach) edges.push({ a: i, b: j, length })
+    }
+  }
+  edges.sort((p, q) => p.length - q.length)
+
+  const parent = poles.map((_, i) => i)
+  const root = (i: number): number => (parent[i] === i ? i : (parent[i] = root(parent[i])))
+  const wires: Array<[number, number]> = []
+  for (const { a, b } of edges) {
+    const [ra, rb] = [root(a), root(b)]
+    if (ra === rb) continue
+    parent[ra] = rb
+    wires.push([poles[a].number, poles[b].number])
+  }
+  return wires
 }
 
 /**
@@ -149,6 +190,15 @@ export function toBlueprintJSON(scene: Scene, registry: ProtoRegistry, options: 
     return out
   })
 
+  // 2.0 lists wires once for the whole blueprint; 1.1 writes them on both ends.
+  const wires = poleWires(scene)
+  if (profile.directionScale !== 2) {
+    for (const [a, b] of wires) {
+      ;(entities[a - 1].neighbours ??= []).push(b)
+      ;(entities[b - 1].neighbours ??= []).push(a)
+    }
+  }
+
   return {
     blueprint: {
       item: 'blueprint',
@@ -156,6 +206,9 @@ export function toBlueprintJSON(scene: Scene, registry: ProtoRegistry, options: 
       ...(options.description ? { description: options.description } : {}),
       icons: buildIcons(scene, profile),
       entities,
+      ...(profile.directionScale === 2 && wires.length
+        ? { wires: wires.map(([a, b]) => [a, POLE_COPPER, b, POLE_COPPER]) }
+        : {}),
       version: packGameVersion(registry.dataset),
     },
   }

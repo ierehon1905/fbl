@@ -44,6 +44,12 @@ export interface EntityGeometry {
    */
   supplyArea?: number
   /**
+   * How far a pole throws a copper wire, centre to centre, as Factorio's
+   * `maximum_wire_distance`. The exporter wires poles within it; without wires in the
+   * blueprint the game joins pasted poles on its own and leaves some of them out.
+   */
+  wireReach?: number
+  /**
    * Draws electricity. The dataset marks the 18 crafting machines that do; everything else —
    * inserters, lamps, radars — has to say so here.
    */
@@ -92,10 +98,10 @@ export const ENTITY_GEOMETRY: Record<string, EntityGeometry> = {
   'stack-filter-inserter': { ...belt('inserter'), powered: true },
 
   // ── Power ────────────────────────────────────────────────────────────────────
-  'small-electric-pole': { size: [1, 1], kind: 'pole', supplyArea: 2.5 },
-  'medium-electric-pole': { size: [1, 1], kind: 'pole', supplyArea: 3.5 },
-  'big-electric-pole': { size: [2, 2], kind: 'pole', supplyArea: 2 },
-  substation: { size: [2, 2], kind: 'pole', supplyArea: 9 },
+  'small-electric-pole': { size: [1, 1], kind: 'pole', supplyArea: 2.5, wireReach: 7.5 },
+  'medium-electric-pole': { size: [1, 1], kind: 'pole', supplyArea: 3.5, wireReach: 9 },
+  'big-electric-pole': { size: [2, 2], kind: 'pole', supplyArea: 2, wireReach: 32 },
+  substation: { size: [2, 2], kind: 'pole', supplyArea: 9, wireReach: 18 },
   'solar-panel': { size: [3, 3], kind: 'machine' },
   accumulator: { size: [2, 2], kind: 'machine' },
   boiler: { size: [3, 2], rotatable: true, kind: 'machine' },

@@ -344,6 +344,21 @@ test('an inserter exports pointing at its pickup, as the game stores it', () => 
   assert.equal(picks.direction, 8)
 })
 
+test('poles in reach are wired into one tree, and out of reach stay apart', () => {
+  // Three substations 18 apart in a row, and a fourth too far from all of them.
+  const { scene } = run(`
+    substation (at (0, 0))
+    substation (at (18, 0))
+    substation (at (36, 0))
+    substation (at (100, 0))
+  `)
+  const { json } = exportBlueprint(scene, registry)
+  assert.deepEqual(json.blueprint.wires, [
+    [1, 5, 2, 5],
+    [2, 5, 3, 5],
+  ])
+})
+
 test('a recipe the dataset renamed exports under the name the game knows', async () => {
   const spaceAge21 = await registryFor('2x1', { ...SPA, id: '2x1' })
   const { scene } = run('foundry (at (0, 0), recipe copper-ore-melting)', spaceAge21)

@@ -25,6 +25,8 @@ export interface Prototype {
   beltSpeed?: number
   /** Half the width of the square this pole powers, from its centre. */
   supplyArea?: number
+  /** How far this pole throws a copper wire, centre to centre. */
+  wireReach?: number
   /** Draws electricity from the grid. */
   needsPower: boolean
   /** Inventory slots, for chests. */
@@ -117,6 +119,7 @@ export class ProtoRegistry {
         craftingSpeed: item.machine?.speed,
         beltSpeed: item.belt?.speed,
         supplyArea: overrides?.supplyArea,
+        wireReach: overrides?.wireReach,
         needsPower: overrides?.powered ?? item.machine?.type === 'electric',
         slots: overrides?.slots,
       })

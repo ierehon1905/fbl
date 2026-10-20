@@ -29,7 +29,8 @@ What to know before trusting it with a real base:
 - **No macros.** The v1 Lisp had them; this syntax is not homoiconic, and both macros in the
   old examples turned out to be plain blocks with a `for` inside. The AST is shaped so they
   could come back as AST macros, but nothing depends on that today.
-- **No circuit wires, no rails, no fluids beyond placing pipes.** No automatic belt routing —
+- **No circuit wires, no rails, no fluids beyond placing pipes.** Copper wires between poles
+  are the exception: the exporter writes them (see [blueprint.md](blueprint.md)). No automatic belt routing —
   `via` corners are yours to choose.
 - **The production tab cannot recycle.** Recycling recipes are left out of the graph a factory
   is planned from, so a plan never says "shred fifteen scrap a second for that". On Fulgora,

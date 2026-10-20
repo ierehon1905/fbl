@@ -45,6 +45,17 @@ think about when you lay one down. The game points an inserter at where it **pic
 exporter and the sprite picker both turn an inserter round on the way out (`gameDirection` in
 `src/core/geometry.ts`); everything inside the language keeps the drop direction.
 
+## Pole wires
+
+The exporter wires the poles itself. Left to the game, pasted poles join only some of their
+neighbours, and whole rows of a build came out cut off. Every pair of poles whose centres are
+within the shorter of their two wire reaches (`wireReach` in `src/data/entity-geometry.ts`) is
+a candidate, and a minimum spanning tree over those keeps each group in range joined with the
+fewest, shortest wires (`poleWires` in `src/core/blueprint.ts`). Poles out of reach of each
+other are not joined; that gap is the program's to close. 2.0 lists the wires once, in the
+blueprint's `wires` array on the pole copper connector; 1.1 writes them on both poles as
+`neighbours`.
+
 ## Modules and quality
 
 Two formats, chosen by the version profile:
